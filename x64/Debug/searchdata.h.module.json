@@ -1,0 +1,22 @@
+{
+    "version": 1,
+    "revision": 0,
+    "rules": [
+        {
+            "primary-output": "x64\\Debug\\searchData.h.obj",
+            "outputs": [
+                "C:\\Users\\olson\\source\\repos\\SFML\\Color-Thing\\Color-Thing\\x64\\Debug\\vc143.pdb",
+                "x64\\Debug\\",
+                "C:\\Users\\olson\\source\\repos\\SFML\\Color-Thing\\Color-Thing\\x64\\Debug\\searchData.h.ifc"
+            ],
+            "provides": [
+                {
+                    "logical-name": "searchData.h",
+                    "source-path": "c:\\users\\olson\\source\\repos\\sfml\\color-thing\\color-thing\\searchdata.h",
+                    "lookup-method": "absolute"
+                }
+            ],
+            "requires": []
+        }
+    ]
+}

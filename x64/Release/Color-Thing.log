@@ -1,0 +1,93 @@
+﻿  Scanning sources for module dependencies...
+  Main.cpp
+C:\Users\olson\source\repos\SFML\Color-Thing\Color-Thing\Main.cpp(84,13): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\Users\olson\source\repos\SFML\Color-Thing\Color-Thing\Main.cpp(86,15): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\olson\source\repos\SFML\Color-Thing\Color-Thing\Main.cpp(99,41): warning C4244: 'argument': conversion from 'long double' to 'float', possible loss of data
+C:\Users\olson\source\repos\SFML\Color-Thing\Color-Thing\Main.cpp(115,22): warning C4244: 'argument': conversion from 'long double' to 'T', possible loss of data
+          with
+          [
+              T=float
+          ]
+C:\Users\olson\source\repos\SFML\Color-Thing\Color-Thing\Main.cpp(114,22): warning C4244: 'argument': conversion from 'long double' to 'T', possible loss of data
+          with
+          [
+              T=float
+          ]
+C:\Users\olson\source\repos\SFML\Color-Thing\Color-Thing\Main.cpp(119,22): warning C4244: 'argument': conversion from 'long double' to 'T', possible loss of data
+          with
+          [
+              T=float
+          ]
+C:\Users\olson\source\repos\SFML\Color-Thing\Color-Thing\Main.cpp(118,22): warning C4244: 'argument': conversion from 'long double' to 'T', possible loss of data
+          with
+          [
+              T=float
+          ]
+C:\Users\olson\source\repos\SFML\Color-Thing\Color-Thing\Main.cpp(127,22): warning C4244: 'argument': conversion from 'long double' to 'T', possible loss of data
+          with
+          [
+              T=float
+          ]
+C:\Users\olson\source\repos\SFML\Color-Thing\Color-Thing\Main.cpp(126,22): warning C4244: 'argument': conversion from 'long double' to 'T', possible loss of data
+          with
+          [
+              T=float
+          ]
+C:\Users\olson\source\repos\SFML\Color-Thing\Color-Thing\Main.cpp(131,22): warning C4244: 'argument': conversion from 'long double' to 'T', possible loss of data
+          with
+          [
+              T=float
+          ]
+C:\Users\olson\source\repos\SFML\Color-Thing\Color-Thing\Main.cpp(130,22): warning C4244: 'argument': conversion from 'long double' to 'T', possible loss of data
+          with
+          [
+              T=float
+          ]
+C:\Users\olson\source\repos\SFML\Color-Thing\Color-Thing\Main.cpp(139,22): warning C4244: 'argument': conversion from 'long double' to 'T', possible loss of data
+          with
+          [
+              T=float
+          ]
+C:\Users\olson\source\repos\SFML\Color-Thing\Color-Thing\Main.cpp(138,22): warning C4244: 'argument': conversion from 'long double' to 'T', possible loss of data
+          with
+          [
+              T=float
+          ]
+C:\Users\olson\source\repos\SFML\Color-Thing\Color-Thing\Main.cpp(143,22): warning C4244: 'argument': conversion from 'long double' to 'T', possible loss of data
+          with
+          [
+              T=float
+          ]
+C:\Users\olson\source\repos\SFML\Color-Thing\Color-Thing\Main.cpp(142,22): warning C4244: 'argument': conversion from 'long double' to 'T', possible loss of data
+          with
+          [
+              T=float
+          ]
+C:\Users\olson\source\repos\SFML\Color-Thing\Color-Thing\Main.cpp(177,23): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\Users\olson\source\repos\SFML\Color-Thing\Color-Thing\Main.cpp(184,15): warning C4244: 'argument': conversion from 'time_t' to 'unsigned int', possible loss of data
+C:\Users\olson\source\repos\SFML\Color-Thing\Color-Thing\Main.cpp(222,19): warning C4305: 'initializing': truncation from 'double' to 'float'
+C:\Users\olson\source\repos\SFML\Color-Thing\Color-Thing\Main.cpp(223,26): warning C4305: 'initializing': truncation from 'double' to 'float'
+C:\Users\olson\source\repos\SFML\Color-Thing\Color-Thing\Main.cpp(271,28): warning C4553: '==': result of expression not used; did you intend '='?
+C:\Users\olson\source\repos\SFML\Color-Thing\Color-Thing\Main.cpp(276,51): warning C4267: 'argument': conversion from 'size_t' to '_Ty', possible loss of data
+          with
+          [
+              _Ty=int
+          ]
+C:\Users\olson\source\repos\SFML\Color-Thing\Color-Thing\Main.cpp(294,59): warning C4305: 'argument': truncation from 'long double' to 'float'
+C:\Users\olson\source\repos\SFML\Color-Thing\Color-Thing\Main.cpp(301,65): warning C4305: 'argument': truncation from 'long double' to 'float'
+C:\Users\olson\source\repos\SFML\Color-Thing\Color-Thing\Main.cpp(497,48): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\olson\source\repos\SFML\Color-Thing\Color-Thing\Main.cpp(527,60): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\olson\source\repos\SFML\Color-Thing\Color-Thing\Main.cpp(536,58): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\olson\source\repos\SFML\Color-Thing\Color-Thing\Main.cpp(615,63): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\olson\source\repos\SFML\Color-Thing\Color-Thing\Main.cpp(618,56): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\olson\source\repos\SFML\Color-Thing\Color-Thing\Main.cpp(682,100): warning C4244: 'argument': conversion from 'sf::Int32' to 'float', possible loss of data
+C:\Users\olson\source\repos\SFML\Color-Thing\Color-Thing\Main.cpp(693,100): warning C4244: 'argument': conversion from 'sf::Int32' to 'float', possible loss of data
+C:\Users\olson\source\repos\SFML\Color-Thing\Color-Thing\Main.cpp(695,100): warning C4244: 'argument': conversion from 'sf::Int32' to 'float', possible loss of data
+C:\Users\olson\source\repos\SFML\Color-Thing\Color-Thing\Main.cpp(721,30): warning C4244: 'initializing': conversion from 'int' to 'float', possible loss of data
+C:\Users\olson\source\repos\SFML\Color-Thing\Color-Thing\Main.cpp(722,34): warning C4244: 'initializing': conversion from 'int' to 'float', possible loss of data
+  Generating code
+  24 of 1182 functions ( 2.0%) were compiled, the rest were copied from previous compilation.
+    14 functions were new in current compilation
+    14 functions had inline decision re-evaluated but remain unchanged
+  Finished generating code
+  Color-Thing.vcxproj -> C:\Users\olson\source\repos\SFML\Color-Thing\x64\Release\Color-Thing.exe
