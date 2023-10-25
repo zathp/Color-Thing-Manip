@@ -24,7 +24,17 @@
  *
  *******************************************************************************/
 
-#include "SFML\Graphics.hpp"
+#define GLEW_STATIC
+#define NOMINMAX
+
+#include <windows.h>
+#include <GL/glew.h>
+
+#include <SFML/Graphics.hpp>
+
+#include <cuda_runtime_api.h>
+#include <device_launch_parameters.h>
+#include <cuda_gl_interop.h>
 
 #include <iostream>
 #include <string>
@@ -35,11 +45,11 @@
 #include <string>
 #include <functional>
 
+#include "fftw3.h"
+#include "RtAudio.h"
+
 #include "agent.h"
 #include "searchData.h"
-
-#include "cuda_runtime.h"
-#include "device_launch_parameters.h"
 
 //image size
 #define WIDTH 800
@@ -49,8 +59,31 @@
 #define WINDOW_WIDTH 1920
 #define WINDOW_HEIGHT 1080
 
-extern "C" void run(const SearchSettings settingData, const SearchInput* inputData,
-    const Pixel* imData, const Point* ptData, SearchOutput* outputData, cudaStream_t &stream);
+#define AUDIO_BUFFER_FRAMES 1024
+#define AUDIO_SPECTRUM AUDIO_BUFFER_FRAMES / 2 + 1
+
+struct AudioData {
+    float inputBuffer[AUDIO_BUFFER_FRAMES];
+    fftwf_complex spectrum[AUDIO_SPECTRUM];  // nBufferFrames / 2 + 1
+};
+
+AudioData audioData;
+
+int recordCallback(void* outputBuffer, void* inputBuffer, unsigned int nBufferFrames,
+    double streamTime, RtAudioStreamStatus status, void* userData) {
+    AudioData* data = reinterpret_cast<AudioData*>(userData);
+
+    memcpy(data->inputBuffer, inputBuffer, sizeof(float) * nBufferFrames);
+
+    fftwf_plan plan = fftwf_plan_dft_r2c_1d(nBufferFrames, data->inputBuffer, data->spectrum, FFTW_ESTIMATE);
+    fftwf_execute(plan);
+
+    fftwf_destroy_plan(plan);
+    return 0;
+}
+
+extern "C" void run(int blockSize, const SearchSettings settingData, const SearchInput* inputData,
+    cudaGraphicsResource * cudaResource, const Point* ptData, SearchOutput* outputData);
 
 using namespace std;
 using namespace sf;
@@ -164,6 +197,73 @@ void updatePreview(vector<ConvexShape> &searchPreview, Vector2f previewPos, floa
     ) + previewPos);
 }
 
+float getMagnitude(int i) {
+    float mag = sqrt(
+        audioData.spectrum[i][0] * audioData.spectrum[i][0]
+        + audioData.spectrum[i][1] * audioData.spectrum[i][1]
+    );
+
+    mag;
+
+    return mag;
+}
+
+Vector3f processAudio(Vector3f freqFactors) {
+    const float maxFreq = 44100.0f / 2;
+
+    const float binWidth = maxFreq / AUDIO_SPECTRUM;
+
+    float bassMaxFreq = 250;
+    float lowMidMaxFreq = 500;
+    float midMaxFreq = 2000;
+    float upperMidMaxFreq = 4000;
+
+    int bassBins = bassMaxFreq / binWidth;
+    int lowMidBins = lowMidMaxFreq / binWidth - bassBins;
+    int midBins = midMaxFreq / binWidth - bassBins - lowMidBins;
+    int upperMidBins = upperMidMaxFreq / binWidth - bassBins - lowMidBins - midBins;
+
+    float bassEnergy = 0;
+    float lowMidEnergy = 0;
+    float midEnergy = 0;
+    float upperMidEnergy = 0;
+    float highEnergy = 0;
+
+    for (int i = 0; i < bassBins; i++)
+        bassEnergy += getMagnitude(i);
+
+    for (int i = bassBins; i < bassBins + lowMidBins; i++)
+        lowMidEnergy += getMagnitude(i);
+
+    for (int i = bassBins + lowMidBins; i < bassBins + lowMidBins + midBins; i++)
+        midEnergy += getMagnitude(i);
+
+    for (int i = bassBins + lowMidBins + midBins; i < bassBins + lowMidBins + midBins + upperMidBins; i++)
+        upperMidEnergy += getMagnitude(i);
+
+    for (int i = bassBins + lowMidBins + midBins + upperMidBins; i < AUDIO_SPECTRUM; i++) {
+        highEnergy += getMagnitude(i);
+    }
+
+    float redBucket = bassEnergy;
+    float greenBucket = lowMidEnergy + midEnergy;
+    float blueBucket = upperMidEnergy + highEnergy;
+
+    redBucket *= freqFactors.x;
+    greenBucket *= freqFactors.y;
+    blueBucket *= freqFactors.z;
+
+    float maxEnergy = max(
+        { redBucket, greenBucket, blueBucket }
+    );
+
+    return Vector3f(
+        redBucket / maxEnergy,
+        greenBucket / maxEnergy,
+        blueBucket / maxEnergy
+    );
+}
+
 int main()
 {
     Vector2f scale((float)WINDOW_WIDTH / WIDTH, (float)WINDOW_HEIGHT / HEIGHT);
@@ -177,10 +277,14 @@ int main()
 
     srand(time(NULL));
 
-
     //--------------------------------------------------------------------------------
     // SFML Initialization
     //--------------------------------------------------------------------------------
+
+    ContextSettings settings;
+    settings.depthBits = 24;
+    settings.stencilBits = 8;
+    settings.antialiasingLevel = 4;
 
     float desiredFPS = 500;
     float frameTimeMS = 1000.0 / desiredFPS;
@@ -201,7 +305,6 @@ int main()
     RenderTexture rt;
     rt.create(WIDTH, HEIGHT);
     rt.clear();
-    rt.draw(RectangleShape(Vector2f(100, 100)));
     rt.display();
 
     Texture tex;
@@ -237,6 +340,51 @@ int main()
     Clock timer;
     int frameCount = 0;
 
+
+    //--------------------------------------------------------------------------------
+    //Audio Visualization Init
+    //--------------------------------------------------------------------------------
+
+    RtAudio adc;
+    if (adc.getDeviceCount() < 1) {
+        std::cout << "\nNo audio devices found!\n";
+        exit(1);
+    }
+
+    vector<unsigned int> devices = adc.getDeviceIds();
+    unsigned int deviceCount = devices.size();
+    RtAudio::DeviceInfo info;
+
+    cout << adc.getDeviceCount() << "\n";
+
+    for (int i = 0; i < deviceCount; i++) {
+
+        info = adc.getDeviceInfo(devices[i]);
+
+
+        // Print, for example, the maximum number of output channels for each device
+        cout << "device = " << i;
+        cout << ":\n\ID: " << info.ID;
+        cout << ":\n\tname: " << info.name;
+        cout << "\n\tmaximum output channels: " << info.outputChannels << "\n";
+        cout << "\n\tmaximum input channels: " << info.inputChannels << "\n";
+    }
+
+
+    RtAudio::StreamParameters parameters;
+    parameters.deviceId = 137;
+    parameters.nChannels = 1; // Mono for simplicity
+    parameters.firstChannel = 0;
+
+    unsigned int sampleRate = 44100;
+    unsigned int bufferFrames = AUDIO_BUFFER_FRAMES;
+
+    adc.openStream(nullptr, &parameters, RTAUDIO_FLOAT32, sampleRate, &bufferFrames, &recordCallback, (void*)&audioData);
+    adc.startStream();
+
+    float lowFac = 1.0f;
+    float midFac = 1.0f;
+    float highFac = 1.0f;
 
     //--------------------------------------------------------------------------------
     //Agent Initialiations 
@@ -275,6 +423,8 @@ int main()
 
     float useSimple = -1.0f;
     float useCuda = -1.0f;
+
+    float blockSize = 32;
 
     //settings manipulated by GUI
     //name, val pointer, change rate, format rule, ? shader uniform name, function called on val change
@@ -327,6 +477,12 @@ int main()
                 *groups[currentGroup].settings[currentSetting - 1].val *= -1.0f;
             }
         }),
+        Setting("Block Size:", &blockSize, 32.0f, 2, [&]() {
+            if (blockSize < 32)
+                blockSize = 32;
+            if (blockSize > 1024)
+                blockSize = 1024;
+        }),
     };
     
     groups[1].settings = {
@@ -363,6 +519,12 @@ int main()
     };
 
     groups[3].settings = {
+        Setting("Audio:", &Agent::audioAlternate, 0.0f, 4, [&]() {
+            *groups[currentGroup].settings[currentSetting - 1].val *= -1.0f;
+        }),
+        Setting("\tLow Factor:", &lowFac, 0.01f, 0, [&]() {}),
+        Setting("\tMid Factor:", &midFac, 0.01f, 0, [&]() {}),
+        Setting("\tHigh Factor:", &highFac, 0.01f, 0, [&]() {}),
         Setting("Global:", &Agent::alternate, 0.0f, 4, [&]() {
             *groups[currentGroup].settings[currentSetting - 1].val *= -1.0f;
             colorAlternateTimer.restart();
@@ -435,29 +597,34 @@ int main()
         cout << cudaDeviceCount << " CUDA device" << (cudaDeviceCount > 1 ? "s" : "") << " found\n";
     }
 
-    Pixel* dev_imageData = 0;
+    //cuda data
+    
+    GLint texId = tex.getNativeHandle();
+
+    //Pixel* dev_imageData = 0;
+    Point* dev_ptData = 0;
+    SearchSettings* dev_settingData = 0;
     SearchInput* dev_inputData = 0;
     SearchOutput* dev_outputData = 0;
-    SearchSettings* dev_settingData = 0;
-    Point* dev_ptData = 0;
-
-    Pixel* pixelData = 0;
+    
+    //host data
     Point* ptData = 0;
     SearchSettings settingData;
     SearchInput* inputData = 0;
     SearchOutput* outputData = 0;
 
-    cudaStream_t inputStream, kernelStream, outputStream;
+    struct cudaGraphicsResource* cudaResource;
 
     function<void()> freeCuda([&]() {
-        cudaFree(dev_imageData);
+
+        cudaGraphicsUnregisterResource(cudaResource);
+
+        //cudaFree(dev_imageData);
         cudaFree(dev_inputData);
         cudaFree(dev_outputData);
         cudaFree(dev_ptData);
 
-        cudaStreamDestroy(inputStream);
-        cudaStreamDestroy(kernelStream);
-        cudaStreamDestroy(outputStream);
+        
     });
 
     function<void()> checkCuda([&]() {
@@ -473,39 +640,33 @@ int main()
 
     if (cudaCapable) {
 
-        pixelData = new Pixel[WIDTH * HEIGHT];
         inputData = new SearchInput[maxAgents];
         outputData = new SearchOutput[maxAgents];
         ptData = new Point[maxPts];
-
+        
         //set cuda device
         cudaSetDevice(0);
         checkCuda();
 
-        //allocate cuda memory for 500,000 agents
-        cudaMalloc((void**)&dev_imageData, sizeof(Pixel) * WIDTH * HEIGHT);
+        cudaGraphicsGLRegisterImage(&cudaResource, texId,
+            GL_TEXTURE_2D, cudaGraphicsRegisterFlagsNone);
         checkCuda();
-        cudaDeviceSynchronize();
 
+        //allocate image data
+        /*cudaMalloc((void**)&dev_imageData, sizeof(Pixel) * WIDTH * HEIGHT);
+        checkCuda();*/
+
+        //allocate cuda memory for i/o for 500,000 agents
         cudaMalloc((void**)&dev_inputData, sizeof(SearchInput) * maxAgents);
         checkCuda();
 
         cudaMalloc((void**)&dev_outputData, sizeof(SearchOutput) * maxAgents);
         checkCuda();
 
+        //allocate normal triangle coordinate data
         cudaMalloc((void**)&dev_ptData, sizeof(Point) * maxPts);
         checkCuda();
 
-        //create cuda streams
-        cudaStreamCreate(&inputStream);
-        checkCuda();
-
-        cudaStreamCreate(&kernelStream);
-        checkCuda();
-
-        cudaStreamCreate(&outputStream);
-        checkCuda();
-        
         //load search settings
         settingData.ptCount = 0;
 
@@ -518,7 +679,6 @@ int main()
         settingData.agentCount = agentList.size();
     }
 
-
     //--------------------------------------------------------------------------------
     //Main loop
     //--------------------------------------------------------------------------------
@@ -530,9 +690,12 @@ int main()
         bool settingAltered = false;
         bool settingSelected = false;
         while (window.pollEvent(event)) {
-            if(event.type == Event::Closed)
-                window.close();
 
+            if (event.type == Event::Closed) {
+                window.close();
+                break;
+            }
+                
             if (event.type == Event::KeyPressed) {
 
                 //setting manipulation
@@ -573,7 +736,7 @@ int main()
 
                 //reset view
                 if (event.key.code == Keyboard::R) {
-                    view.setCenter(Vector2f(0, 0));
+                    view.setCenter(Vector2f(WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2));
                     view.setSize(Vector2f(WINDOW_WIDTH, WINDOW_HEIGHT));
                     accZoom = 1;
                     worldTex.setView(view);
@@ -632,13 +795,18 @@ int main()
             //get a copy of current world image and feed into agents for decision making
             im = rt.getTexture().copyToImage();
             
+            //map audio frequencies to color
+            if (Agent::audioAlternate > 0) {
+                Agent::audioMod = processAudio(Vector3f(lowFac, midFac, highFac));
+            }
+
             //GPU accelerated agent searches
             if (useCuda > 0) {
 
                 //copy image data
-                const unsigned char* pixelData = im.getPixelsPtr();
+                /*const unsigned char* pixelData = im.getPixelsPtr();
                 cudaMemcpy(dev_imageData, pixelData, sizeof(unsigned char) * 4 * WIDTH * HEIGHT, cudaMemcpyHostToDevice);
-                checkCuda();
+                checkCuda();*/
 
                 //copy setting data
                 settingData.ptCount = Agent::normTriangle.size();
@@ -655,27 +823,17 @@ int main()
                 checkCuda();
 
                 //copy input
-                cudaMemcpyAsync(dev_inputData, inputData, sizeof(SearchInput) * agentList.size(), cudaMemcpyHostToDevice, inputStream);
-                checkCuda();
-
-                cudaStreamSynchronize(inputStream);
+                cudaMemcpy(dev_inputData, inputData, sizeof(SearchInput) * agentList.size(), cudaMemcpyHostToDevice);
                 checkCuda();
 
                 //run searches
-                run(settingData, dev_inputData, dev_imageData, dev_ptData, dev_outputData, kernelStream);
-                checkCuda();
-
-                cudaStreamSynchronize(kernelStream);
-                checkCuda();
-
-                //copy data from gpu
-                cudaMemcpyAsync(outputData, dev_outputData, sizeof(SearchOutput)* agentList.size(), cudaMemcpyDeviceToHost, outputStream);
-                checkCuda();
-
-                cudaStreamSynchronize(outputStream);
+                run(round(blockSize), settingData, dev_inputData, cudaResource, dev_ptData, dev_outputData);
                 checkCuda();
 
                 cudaDeviceSynchronize();
+
+                //copy data from gpu
+                cudaMemcpy(outputData, dev_outputData, sizeof(SearchOutput) * agentList.size(), cudaMemcpyDeviceToHost);
                 checkCuda();
 
                 std::for_each(execution::par_unseq, indices.begin(), indices.end(), [&](int i) {
@@ -701,7 +859,7 @@ int main()
                         );
 
                     //perform agent operations
-                    agentList[i].alternateColor(colorAlternateTimer.getElapsedTime().asMilliseconds());
+                    agentList[i].colorFilters(colorAlternateTimer.getElapsedTime().asMilliseconds());
                     agentList[i].updateDir();
                     agentList[i].updatePos(im);
 
@@ -721,7 +879,7 @@ int main()
                     agentList[i].updateDir();
 
                     //color filters
-                    agentList[i].alternateColor(colorAlternateTimer.getElapsedTime().asMilliseconds());
+                    agentList[i].colorFilters(colorAlternateTimer.getElapsedTime().asMilliseconds());
 
                     //advance and place color
                     agentList[i].updatePos(im);
@@ -795,7 +953,6 @@ int main()
 
         delete[] inputData;
         delete[] outputData;
-        delete[] pixelData;
         delete[] ptData;
     }
 

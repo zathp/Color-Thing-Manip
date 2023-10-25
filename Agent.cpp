@@ -1,5 +1,5 @@
+#pragma once
 #include "Agent.h"
-#include "SFML\Graphics.hpp"
 #include <random>
 #include <vector>
 #include <math.h>
@@ -34,7 +34,11 @@ float Agent::distPeriodR = 30.0f;
 float Agent::distPeriodG = 70.0f;
 float Agent::distPeriodB = 50.0f;
 
+float Agent::audioAlternate = -1.0f;
+
 Vector3f Agent::palette = Vector3f(1.0f, 1.0f, 1.0f);
+
+Vector3f Agent::audioMod = Vector3f(1, 1, 1);
 
 int Agent::width = 800;
 int Agent::height = 450;
@@ -58,6 +62,21 @@ Agent::Agent() {
     updateColor();
 }
 
+void Agent::colorFilters(float time) {
+
+    updateColor();
+
+    if (alternate > 0 || distAlternate > 0)
+        alternateColor(time);
+
+    if (audioAlternate > 0) {
+        color.r *= audioMod.x;
+        color.g *= audioMod.y;
+        color.b *= audioMod.z;
+    }
+
+}
+
 void Agent::updateColor() {
     color.r = colorBase.x * palette.x;
     color.g = colorBase.y * palette.y;
@@ -65,13 +84,6 @@ void Agent::updateColor() {
 }
 
 void Agent::alternateColor(float time) {
-
-    Vector2f center(width / 2, height / 2);
-    float dist = sqrt(pow(center.x - pos.x, 2) + pow(center.y - pos.y, 2));
-
-    color.r = colorBase.x * palette.x;
-    color.g = colorBase.y * palette.y;
-    color.b = colorBase.z * palette.z;
 
     if (alternate > 0) {
         if (globalPeriodR != 0)
@@ -89,6 +101,10 @@ void Agent::alternateColor(float time) {
     }
 
     if (distAlternate > 0) {
+
+        Vector2f center(width / 2, height / 2);
+        float dist = sqrt(pow(center.x - pos.x, 2) + pow(center.y - pos.y, 2));
+
         if(distR != 0 && distPeriodR != 0)
             color.r *= cosfRatio(
                 dist / distR / cosfRatio(

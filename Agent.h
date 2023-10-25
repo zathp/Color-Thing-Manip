@@ -1,5 +1,4 @@
 #pragma once
-
 #include "SFML\Graphics.hpp"
 #include <math.h>
 #include <array>
@@ -38,6 +37,9 @@ public:
 
     static Vector3f palette;
 
+    static float audioAlternate;
+    static Vector3f audioMod;
+
     static int width;
     static int height;
 
@@ -52,6 +54,8 @@ public:
     };
 
     Agent();
+
+    void colorFilters(float time);
 
     void updateColor();
 
