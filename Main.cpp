@@ -59,15 +59,17 @@
 #define WINDOW_WIDTH 1920
 #define WINDOW_HEIGHT 1080
 
-#define AUDIO_BUFFER_FRAMES 1024
-#define AUDIO_SPECTRUM AUDIO_BUFFER_FRAMES / 2 + 1
+//input audio parameters
+#define AUDIO_FREQUENCY 44100.0f
+#define AUDIO_BUFFER_FRAMES 512
+#define AUDIO_SPECTRUM 257 //buffer frames / 2 + 1
 
 struct AudioData {
     float inputBuffer[AUDIO_BUFFER_FRAMES];
-    fftwf_complex spectrum[AUDIO_SPECTRUM];  // nBufferFrames / 2 + 1
+    fftwf_complex spectrum[AUDIO_SPECTRUM];
 };
 
-AudioData audioData;
+AudioData AUDIO_BUFFER;
 
 int recordCallback(void* outputBuffer, void* inputBuffer, unsigned int nBufferFrames,
     double streamTime, RtAudioStreamStatus status, void* userData) {
@@ -104,10 +106,16 @@ struct Setting {
     float* val;
     function<void()> action;
 
+    vector<string> mappedVals = vector<string>(0);
+
     string shaderVar;
 
     Text settingText;
     Text valText;
+
+    Setting(string name, float* val, float delta, int rule, vector<string> mappedVals, function<void()> action) : Setting(name, val, delta, rule, action) {
+        this->mappedVals = mappedVals;
+    }
 
     Setting(string name, float* val, float delta, int rule, string shaderVar, function<void()> action) : Setting(name, val, delta, rule, action) {
         this->shaderVar = shaderVar;
@@ -120,6 +128,22 @@ struct Setting {
         this->val = val;
         this->action = action;
     }
+
+    void wrap(float min, float max) {
+        if (*val < min) *val = max;
+        if (*val > max) *val = min;
+    }
+
+    void wrapInMap() {
+        if (*val < 0) *val = mappedVals.size();
+        if (*val >= mappedVals.size()) *val = 0;
+    }
+
+    void clamp(float min, float max) {
+        if (*val < min) *val = min;
+        if (*val > max) *val = max;
+    }
+
 
 };
 
@@ -144,9 +168,11 @@ string formatFloat(float f, int n) {
     return front + "." + back;
 }
 
-string getSettingString(float val, int rule) {
-    //formatting rule: 0 - decimal number, 1 - scaled decimal, 2 - integer number, 3 - angle , 4 - boolean
-    if (rule == 4)
+string getSettingString(float val, int rule, vector<string> map) {
+    //formatting rule: 0 - decimal number, 1 - scaled decimal, 2 - integer number, 3 - angle , 4 - boolean, 5 - mapped string
+    if (rule == 5) {
+        return map[(int)round(val)].substr(0, 6);
+    }else if (rule == 4)
         return val > 0 ? "True" : "False";
     else if (rule == 3)
         return formatFloat(val * 180.0f / _Pi, 2) + (char) 248;
@@ -199,68 +225,47 @@ void updatePreview(vector<ConvexShape> &searchPreview, Vector2f previewPos, floa
 
 float getMagnitude(int i) {
     float mag = sqrt(
-        audioData.spectrum[i][0] * audioData.spectrum[i][0]
-        + audioData.spectrum[i][1] * audioData.spectrum[i][1]
+        AUDIO_BUFFER.spectrum[i][0] * AUDIO_BUFFER.spectrum[i][0]
+        + AUDIO_BUFFER.spectrum[i][1] * AUDIO_BUFFER.spectrum[i][1]
     );
 
-    mag;
+    //mag = log(mag+1);
 
     return mag;
 }
 
-Vector3f processAudio(Vector3f freqFactors) {
-    const float maxFreq = 44100.0f / 2;
+Vector3f processAudio(array<array<float,2>,3> &bucketFrequencies, Vector3f freqFactors) {
+    //bass:         250hz
+    //low mid:      500hz
+    //mid:          2000hz
+    //upper mid:    4000hz
+    //high:         4000+hz
 
+    const float maxFreq = AUDIO_FREQUENCY / 2;
     const float binWidth = maxFreq / AUDIO_SPECTRUM;
 
-    float bassMaxFreq = 250;
-    float lowMidMaxFreq = 500;
-    float midMaxFreq = 2000;
-    float upperMidMaxFreq = 4000;
+    float energies[3] = { 0,0,0 };
+    for (int i = 0; i < 3; i++) {
+        int start = bucketFrequencies[i][0] / binWidth;
+        int end = bucketFrequencies[i][1] / binWidth;
 
-    int bassBins = bassMaxFreq / binWidth;
-    int lowMidBins = lowMidMaxFreq / binWidth - bassBins;
-    int midBins = midMaxFreq / binWidth - bassBins - lowMidBins;
-    int upperMidBins = upperMidMaxFreq / binWidth - bassBins - lowMidBins - midBins;
-
-    float bassEnergy = 0;
-    float lowMidEnergy = 0;
-    float midEnergy = 0;
-    float upperMidEnergy = 0;
-    float highEnergy = 0;
-
-    for (int i = 0; i < bassBins; i++)
-        bassEnergy += getMagnitude(i);
-
-    for (int i = bassBins; i < bassBins + lowMidBins; i++)
-        lowMidEnergy += getMagnitude(i);
-
-    for (int i = bassBins + lowMidBins; i < bassBins + lowMidBins + midBins; i++)
-        midEnergy += getMagnitude(i);
-
-    for (int i = bassBins + lowMidBins + midBins; i < bassBins + lowMidBins + midBins + upperMidBins; i++)
-        upperMidEnergy += getMagnitude(i);
-
-    for (int i = bassBins + lowMidBins + midBins + upperMidBins; i < AUDIO_SPECTRUM; i++) {
-        highEnergy += getMagnitude(i);
+        for (int bin = start; bin < end; bin++)
+            energies[i] += getMagnitude(bin);
     }
 
-    float redBucket = bassEnergy;
-    float greenBucket = lowMidEnergy + midEnergy;
-    float blueBucket = upperMidEnergy + highEnergy;
-
-    redBucket *= freqFactors.x;
-    greenBucket *= freqFactors.y;
-    blueBucket *= freqFactors.z;
+    energies[0] *= freqFactors.x;
+    energies[1] *= freqFactors.y;
+    energies[2] *= freqFactors.z;
 
     float maxEnergy = max(
-        { redBucket, greenBucket, blueBucket }
+        { energies[0], energies[1], energies[2] }
     );
+    if (maxEnergy == 0) maxEnergy = 1;
 
     return Vector3f(
-        redBucket / maxEnergy,
-        greenBucket / maxEnergy,
-        blueBucket / maxEnergy
+        energies[0] / maxEnergy,
+        energies[1] / maxEnergy,
+        energies[2] / maxEnergy
     );
 }
 
@@ -346,45 +351,49 @@ int main()
     //--------------------------------------------------------------------------------
 
     RtAudio adc;
-    if (adc.getDeviceCount() < 1) {
-        std::cout << "\nNo audio devices found!\n";
-        exit(1);
-    }
 
     vector<unsigned int> devices = adc.getDeviceIds();
-    unsigned int deviceCount = devices.size();
-    RtAudio::DeviceInfo info;
+    vector<unsigned int> inputDevices;
+    vector<string> deviceNames;
+    for (int i = 0; i < devices.size(); i++) {
+        RtAudio::DeviceInfo info = adc.getDeviceInfo(devices[i]);
 
-    cout << adc.getDeviceCount() << "\n";
-
-    for (int i = 0; i < deviceCount; i++) {
-
-        info = adc.getDeviceInfo(devices[i]);
-
-
-        // Print, for example, the maximum number of output channels for each device
-        cout << "device = " << i;
-        cout << ":\n\ID: " << info.ID;
-        cout << ":\n\tname: " << info.name;
-        cout << "\n\tmaximum output channels: " << info.outputChannels << "\n";
-        cout << "\n\tmaximum input channels: " << info.inputChannels << "\n";
+        if (info.inputChannels > 0) {
+            inputDevices.push_back(devices[i]);
+            deviceNames.push_back(info.name);
+        }
+            
     }
-
-
+    float deviceIndex = 0;
+    float deviceId = 0;
+    if (inputDevices.size() == 0)
+        cout << "No audio input devices detected\n";
+    else {
+        cout << inputDevices.size() << " input devices detected\n";
+    }
+    
     RtAudio::StreamParameters parameters;
-    parameters.deviceId = 137;
-    parameters.nChannels = 1; // Mono for simplicity
+    if(devices.size() > 0) parameters.deviceId = devices[deviceId];
+    parameters.nChannels = 1;
     parameters.firstChannel = 0;
 
-    unsigned int sampleRate = 44100;
     unsigned int bufferFrames = AUDIO_BUFFER_FRAMES;
 
-    adc.openStream(nullptr, &parameters, RTAUDIO_FLOAT32, sampleRate, &bufferFrames, &recordCallback, (void*)&audioData);
+    adc.openStream(nullptr, &parameters, RTAUDIO_FLOAT32, AUDIO_FREQUENCY, &bufferFrames, &recordCallback, (void*)&AUDIO_BUFFER);
     adc.startStream();
 
-    float lowFac = 1.0f;
-    float midFac = 1.0f;
-    float highFac = 1.0f;
+    //settings to manipulate visualization
+    float rFac = 1.0f;
+    float gFac = 1.0f;
+    float bFac = 1.0f;
+
+    //frequencies associated with each color
+    array<array<float, 2>, 3> frequencies = {
+        array<float,2>{0, 250},
+        array<float,2>{250, 2000},
+        array<float,2>{2000, 44100}
+    };
+
 
     //--------------------------------------------------------------------------------
     //Agent Initialiations 
@@ -418,13 +427,12 @@ int main()
         SettingGroup("Agent Options"),
         SettingGroup("Shader Options"),
         SettingGroup("Color Options"),
-        SettingGroup("Oscillation Options")
+        SettingGroup("Oscillation Options"),
+        SettingGroup("Audio Visualization")
     };
 
     float useSimple = -1.0f;
     float useCuda = -1.0f;
-
-    float blockSize = 32;
 
     //settings manipulated by GUI
     //name, val pointer, change rate, format rule, ? shader uniform name, function called on val change
@@ -477,12 +485,6 @@ int main()
                 *groups[currentGroup].settings[currentSetting - 1].val *= -1.0f;
             }
         }),
-        Setting("Block Size:", &blockSize, 32.0f, 2, [&]() {
-            if (blockSize < 32)
-                blockSize = 32;
-            if (blockSize > 1024)
-                blockSize = 1024;
-        }),
     };
     
     groups[1].settings = {
@@ -519,12 +521,6 @@ int main()
     };
 
     groups[3].settings = {
-        Setting("Audio:", &Agent::audioAlternate, 0.0f, 4, [&]() {
-            *groups[currentGroup].settings[currentSetting - 1].val *= -1.0f;
-        }),
-        Setting("\tLow Factor:", &lowFac, 0.01f, 0, [&]() {}),
-        Setting("\tMid Factor:", &midFac, 0.01f, 0, [&]() {}),
-        Setting("\tHigh Factor:", &highFac, 0.01f, 0, [&]() {}),
         Setting("Global:", &Agent::alternate, 0.0f, 4, [&]() {
             *groups[currentGroup].settings[currentSetting - 1].val *= -1.0f;
             colorAlternateTimer.restart();
@@ -544,6 +540,57 @@ int main()
         Setting("\tB Period:", &Agent::distPeriodB, 0.1f, 0, [&]() {}),
     };
     
+    groups[4].settings = {
+        Setting("Input Device:", &deviceIndex, 1.0f, 5, deviceNames, [&]() {
+            if (deviceIndex >= inputDevices.size()) deviceIndex = 0;
+            if (deviceIndex < 0) deviceIndex = inputDevices.size() - 1;
+            deviceId = inputDevices[deviceIndex];
+
+            if (adc.isStreamRunning())
+                adc.stopStream();
+            
+            if (adc.isStreamOpen())
+                adc.closeStream();
+            
+            parameters.deviceId = inputDevices[deviceIndex];
+            adc.openStream(nullptr, &parameters, RTAUDIO_FLOAT32, AUDIO_FREQUENCY, &bufferFrames, &recordCallback, (void*)&AUDIO_BUFFER);
+            adc.startStream();
+        }),
+        Setting("Enable:", &Agent::audioAlternate, 0.0f, 4, [&]() {
+            *groups[currentGroup].settings[currentSetting - 1].val *= -1.0f;
+        }),
+
+        Setting("\tR Factor:", &rFac, 0.01f, 0, [&]() {}),
+        Setting("\tR Low:", &frequencies[0][0], 1.00f, 2, [&]() {
+            if (frequencies[0][0] < 0) frequencies[0][0] = 0;
+            if (frequencies[0][0] > AUDIO_FREQUENCY) frequencies[0][0] = AUDIO_FREQUENCY;
+        }),
+        Setting("\tR High:", &frequencies[0][1], 1.00f, 2, [&]() {
+            if (frequencies[0][1] < 0) frequencies[0][1] = 0;
+            if (frequencies[0][1] > AUDIO_FREQUENCY) frequencies[0][1] = AUDIO_FREQUENCY;
+        }),
+
+        Setting("\tG Factor:", &gFac, 0.01f, 0, [&]() {}),
+        Setting("\tG Low:", &frequencies[1][0], 1.00f, 2, [&]() {
+            if (frequencies[1][0] < 0) frequencies[1][0] = 0;
+            if (frequencies[1][0] > AUDIO_FREQUENCY) frequencies[1][0] = AUDIO_FREQUENCY;
+        }),
+        Setting("\tG High:", &frequencies[1][1], 1.00f, 2, [&]() {
+            if (frequencies[1][1] < 0) frequencies[1][1] = 0;
+            if (frequencies[1][1] > AUDIO_FREQUENCY) frequencies[1][1] = AUDIO_FREQUENCY;
+        }),
+
+        Setting("\tB Factor:", &bFac, 0.01f, 0, [&]() {}),
+        Setting("\tB Low:", &frequencies[2][0], 1.00f, 2, [&]() {
+            if (frequencies[2][0] < 0) frequencies[2][0] = 0;
+            if (frequencies[2][0] > AUDIO_FREQUENCY) frequencies[2][0] = AUDIO_FREQUENCY;
+        }),
+        Setting("\tB High:", &frequencies[2][1], 1.00f, 2, [&]() {
+            if (frequencies[2][1] < 0) frequencies[2][1] = 0;
+            if (frequencies[2][1] > AUDIO_FREQUENCY) frequencies[2][1] = AUDIO_FREQUENCY;
+        })
+    };
+
     int fps = 0;
     Text fpsCounter(std::to_string(fps), font, 20);
     fpsCounter.setFillColor(Color::White);
@@ -566,8 +613,11 @@ int main()
             groups[g].settings[s].settingText = Text(groups[g].settings[s].name, font, 20);
             groups[g].settings[s].settingText.setFillColor(Color::White);
             groups[g].settings[s].settingText.setPosition(Vector2f(guiBase.getPosition().x, guiBase.getPosition().y + 30 * (s + 2)));
-
-            groups[g].settings[s].valText = Text(getSettingString(*groups[g].settings[s].val, groups[g].settings[s].rule), font, 20);
+            groups[g].settings[s].valText = Text(getSettingString(
+                    *groups[g].settings[s].val,
+                    groups[g].settings[s].rule,
+                    groups[g].settings[s].mappedVals
+                ), font, 20);
             groups[g].settings[s].valText.setFillColor(Color::White);
             groups[g].settings[s].valText.setPosition(Vector2f(guiBase.getPosition().x + 160, guiBase.getPosition().y + 30 * (s + 2)));
         }
@@ -768,10 +818,15 @@ int main()
                     selectedHighlight.setPosition(groups[currentGroup].settings[currentSetting - 1].settingText.getPosition() + Vector2f(0, 2));
             }
 
-            if(currentSetting != 0)
+            if (currentSetting != 0) {
+
                 groups[currentGroup].settings[currentSetting - 1].valText.setString(
-                    getSettingString(*groups[currentGroup].settings[currentSetting - 1].val, groups[currentGroup].settings[currentSetting - 1].rule)
-            );
+                    getSettingString(*groups[currentGroup].settings[currentSetting - 1].val,
+                        groups[currentGroup].settings[currentSetting - 1].rule,
+                        groups[currentGroup].settings[currentSetting - 1].mappedVals
+                    )
+                );
+            }
         }
 
         //mouse drag
@@ -797,7 +852,7 @@ int main()
             
             //map audio frequencies to color
             if (Agent::audioAlternate > 0) {
-                Agent::audioMod = processAudio(Vector3f(lowFac, midFac, highFac));
+                Agent::audioMod = processAudio( frequencies, Vector3f(rFac, gFac, bFac) );
             }
 
             //GPU accelerated agent searches
@@ -827,7 +882,7 @@ int main()
                 checkCuda();
 
                 //run searches
-                run(round(blockSize), settingData, dev_inputData, cudaResource, dev_ptData, dev_outputData);
+                run(32, settingData, dev_inputData, cudaResource, dev_ptData, dev_outputData);
                 checkCuda();
 
                 cudaDeviceSynchronize();
