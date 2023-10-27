@@ -27,6 +27,19 @@
 #define GLEW_STATIC
 #define NOMINMAX
 
+ //image size
+#define WIDTH 800
+#define HEIGHT 450
+
+//window size
+#define WINDOW_WIDTH 1920
+#define WINDOW_HEIGHT 1080
+
+//input audio parameters
+#define AUDIO_FREQUENCY 44100.0f
+#define AUDIO_BUFFER_FRAMES 512
+#define AUDIO_SPECTRUM 257 //buffer frames / 2 + 1
+
 #include <windows.h>
 #include <GL/glew.h>
 
@@ -50,19 +63,6 @@
 
 #include "agent.h"
 #include "searchData.h"
-
-//image size
-#define WIDTH 800
-#define HEIGHT 450
-
-//window size
-#define WINDOW_WIDTH 1920
-#define WINDOW_HEIGHT 1080
-
-//input audio parameters
-#define AUDIO_FREQUENCY 44100.0f
-#define AUDIO_BUFFER_FRAMES 512
-#define AUDIO_SPECTRUM 257 //buffer frames / 2 + 1
 
 struct AudioData {
     float inputBuffer[AUDIO_BUFFER_FRAMES];
@@ -379,9 +379,6 @@ int main()
 
     unsigned int bufferFrames = AUDIO_BUFFER_FRAMES;
 
-    adc.openStream(nullptr, &parameters, RTAUDIO_FLOAT32, AUDIO_FREQUENCY, &bufferFrames, &recordCallback, (void*)&AUDIO_BUFFER);
-    adc.startStream();
-
     //settings to manipulate visualization
     float rFac = 1.0f;
     float gFac = 1.0f;
@@ -436,7 +433,7 @@ int main()
 
     //settings manipulated by GUI
     //name, val pointer, change rate, format rule, ? shader uniform name, function called on val change
-    //formatting rule: 0 - decimal number, 1 - scaled decimal, 2 - integer number, 3 - angle , 4 - boolean
+    //formatting rule: 0 - decimal number, 1 - scaled decimal, 2 - integer number, 3 - angle , 4 - boolean, 5 mapped to string vector
     groups[0].settings = {
         Setting("Agent Count:", &agentCount, 10, 2, [&]() {
             if (agentCount <= 0)
@@ -542,8 +539,10 @@ int main()
     
     groups[4].settings = {
         Setting("Input Device:", &deviceIndex, 1.0f, 5, deviceNames, [&]() {
+
             if (deviceIndex >= inputDevices.size()) deviceIndex = 0;
             if (deviceIndex < 0) deviceIndex = inputDevices.size() - 1;
+
             deviceId = inputDevices[deviceIndex];
 
             if (adc.isStreamRunning())
@@ -553,11 +552,33 @@ int main()
                 adc.closeStream();
             
             parameters.deviceId = inputDevices[deviceIndex];
-            adc.openStream(nullptr, &parameters, RTAUDIO_FLOAT32, AUDIO_FREQUENCY, &bufferFrames, &recordCallback, (void*)&AUDIO_BUFFER);
-            adc.startStream();
+
+            if (Agent::audioAlternate > 0) {
+                adc.openStream(nullptr, &parameters, RTAUDIO_FLOAT32, AUDIO_FREQUENCY, &bufferFrames, &recordCallback, (void*)&AUDIO_BUFFER);
+                adc.startStream();
+            }
         }),
         Setting("Enable:", &Agent::audioAlternate, 0.0f, 4, [&]() {
             *groups[currentGroup].settings[currentSetting - 1].val *= -1.0f;
+            if (Agent::audioAlternate > 0) {
+
+                if (adc.isStreamRunning())
+                    adc.stopStream();
+
+                if (adc.isStreamOpen())
+                    adc.closeStream();
+
+                parameters.deviceId = inputDevices[deviceIndex];
+
+                adc.openStream(nullptr, &parameters, RTAUDIO_FLOAT32, AUDIO_FREQUENCY, &bufferFrames, &recordCallback, (void*)&AUDIO_BUFFER);
+                adc.startStream();
+
+            } else {
+                if (adc.isStreamRunning())
+                    adc.stopStream();
+                if (adc.isStreamOpen())
+                    adc.closeStream();
+            }
         }),
 
         Setting("\tR Factor:", &rFac, 0.01f, 0, [&]() {}),
