@@ -1,11 +1,13 @@
-#pragma once
 #include "Agent.h"
+
 #include <random>
-#include <vector>
 #include <math.h>
-#include <array>
 #include <iostream>
 #include <execution>
+
+#pragma warning(disable: 26495)
+#pragma warning(disable: 4244)
+#pragma warning(disable: 4267)
 
 using namespace std;
 using namespace sf;
@@ -34,7 +36,7 @@ float Agent::distPeriodR = 30.0f;
 float Agent::distPeriodG = 70.0f;
 float Agent::distPeriodB = 50.0f;
 
-float Agent::audioAlternate = -1.0f;
+bool Agent::audioAlternate = false;
 
 Vector3f Agent::palette = Vector3f(1.0f, 1.0f, 1.0f);
 
@@ -74,6 +76,23 @@ void Agent::colorFilters(float time) {
         color.g *= audioMod.y;
         color.b *= audioMod.z;
     }
+
+}
+
+void Agent::updateColorBase(Color c, float rate) {
+    colorBase = Vector3f(
+        colorBase.x + (c.r - colorBase.x) * rate,
+        colorBase.y + (c.g - colorBase.y) * rate,
+        colorBase.z + (c.b - colorBase.z) * rate
+    );
+}
+
+void Agent::randomizeColorBase() {
+	colorBase = Vector3f(
+		(double)(rand() % 206 + 50),
+		(double)(rand() % 206 + 50),
+		(double)(rand() % 206 + 50)
+	);
 
 }
 

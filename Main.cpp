@@ -24,6 +24,10 @@
  *
  *******************************************************************************/
 
+#pragma warning(disable: 26495)
+#pragma warning(disable: 4244)
+#pragma warning(disable: 4267)
+
 #define GLEW_STATIC
 #define NOMINMAX
 
@@ -45,11 +49,16 @@
 
 #include <SFML/Graphics.hpp>
 
+#include <SFGUI/SFGUI.hpp>
+#include <SFGUI/Widgets.hpp>
+#include <SFGUI/Image.hpp>
+
 #include <cuda_runtime_api.h>
 #include <device_launch_parameters.h>
 #include <cuda_gl_interop.h>
 
 #include <iostream>
+#include <filesystem>
 #include <string>
 #include <random>
 #include <vector>
@@ -63,6 +72,7 @@
 
 #include "agent.h"
 #include "searchData.h"
+#include "GUI.hpp"
 
 struct AudioData {
     float inputBuffer[AUDIO_BUFFER_FRAMES];
@@ -89,6 +99,8 @@ extern "C" void run(int blockSize, const SearchSettings settingData, const Searc
 
 using namespace std;
 using namespace sf;
+using namespace sfg;
+namespace fs = filesystem;
 
 Vector2f operator*(Vector2f l, Vector2f r) {
     return Vector2f(l.x * r.x, l.y * r.y);
@@ -98,96 +110,14 @@ Vector2f operator*(float l, Vector2f r) {
     return Vector2f(l * r.x, l * r.y);
 }
 
-struct Setting {
+void updatePreview( RenderTexture& tex, sfg::Image::Ptr sfgImage,
+    Vector2f previewPos, float previewScale) {
 
-    string name;
-    float delta;
-    int rule;
-    float* val;
-    function<void()> action;
+    vector<ConvexShape> searchPreview = { ConvexShape(), ConvexShape(), ConvexShape() };
 
-    vector<string> mappedVals = vector<string>(0);
-
-    string shaderVar;
-
-    Text settingText;
-    Text valText;
-
-    Setting(string name, float* val, float delta, int rule, vector<string> mappedVals, function<void()> action) : Setting(name, val, delta, rule, action) {
-        this->mappedVals = mappedVals;
-    }
-
-    Setting(string name, float* val, float delta, int rule, string shaderVar, function<void()> action) : Setting(name, val, delta, rule, action) {
-        this->shaderVar = shaderVar;
-    }
-
-    Setting(string name, float* val, float delta, int rule, function<void()> action) {
-        this->name = name;
-        this->delta = delta;
-        this->rule = rule;
-        this->val = val;
-        this->action = action;
-    }
-
-    void wrap(float min, float max) {
-        if (*val < min) *val = max;
-        if (*val > max) *val = min;
-    }
-
-    void wrapInMap() {
-        if (*val < 0) *val = mappedVals.size();
-        if (*val >= mappedVals.size()) *val = 0;
-    }
-
-    void clamp(float min, float max) {
-        if (*val < min) *val = min;
-        if (*val > max) *val = max;
-    }
-
-
-};
-
-struct SettingGroup {
-
-    Text groupText;
-    string name;
-    vector<Setting> settings;
-
-    SettingGroup(string name) : name(name) {}
-
-};
-
-string formatFloat(float f, int n) {
-    float g = pow(10.0f,n);
-    string s = to_string(roundf(f * g) / g);
-    int delim = s.find(".");
-    string front = s.substr(0, delim);
-    if (n == 0) return front;
-    string back = s.substr(delim + 1, s.length());
-    if (back.length() > n) back = back.substr(0, back.length() - (back.length() - n));
-    return front + "." + back;
-}
-
-string getSettingString(float val, int rule, vector<string> map) {
-    //formatting rule: 0 - decimal number, 1 - scaled decimal, 2 - integer number, 3 - angle , 4 - boolean, 5 - mapped string
-    if (rule == 5) {
-        return map[(int)round(val)].substr(0, 6);
-    }else if (rule == 4)
-        return val > 0 ? "True" : "False";
-    else if (rule == 3)
-        return formatFloat(val * 180.0f / _Pi, 2) + (char) 248;
-    else if (rule == 2)
-        return to_string((int)val);
-    else if (rule == 1)
-        return formatFloat(val * 100.0f, 2);
-    else
-        return formatFloat(val, 2);
-}
-
-void updatePreview(vector<ConvexShape> &searchPreview, Vector2f previewPos, float previewScale) {
     //0: left, 1: front, 2: right
     searchPreview[0].setPointCount(3);
-    searchPreview[0].setFillColor(Color(255, 0, 0, 100));
+    searchPreview[0].setFillColor(Color(255, 0, 0, 150));
     searchPreview[0].setPoint(0, Vector2f(0, 0) + previewPos);
     searchPreview[0].setPoint(1, Vector2f(
         previewScale * cos(_Pi / -2.0f + Agent::searchAngleOffset + Agent::searchAngle * 3.0f / 2.0f),
@@ -199,7 +129,7 @@ void updatePreview(vector<ConvexShape> &searchPreview, Vector2f previewPos, floa
     ) + previewPos);
 
     searchPreview[1].setPointCount(3);
-    searchPreview[1].setFillColor(Color(0, 255, 0, 100));
+    searchPreview[1].setFillColor(Color(0, 255, 0, 150));
     searchPreview[1].setPoint(0, Vector2f(0, 0) + previewPos);
     searchPreview[1].setPoint(1, Vector2f(
         previewScale * cos(_Pi / -2.0f + Agent::searchAngle / 2.0f),
@@ -211,7 +141,7 @@ void updatePreview(vector<ConvexShape> &searchPreview, Vector2f previewPos, floa
     ) + previewPos);
 
     searchPreview[2].setPointCount(3);
-    searchPreview[2].setFillColor(Color(0, 0, 255, 100));
+    searchPreview[2].setFillColor(Color(0, 0, 255, 150));
     searchPreview[2].setPoint(0, Vector2f(0, 0) + previewPos);
     searchPreview[2].setPoint(1, Vector2f(
         previewScale * cos(_Pi / -2.0f - Agent::searchAngleOffset - Agent::searchAngle / 2.0f),
@@ -221,6 +151,14 @@ void updatePreview(vector<ConvexShape> &searchPreview, Vector2f previewPos, floa
         previewScale * cos(_Pi / -2.0f - Agent::searchAngleOffset - Agent::searchAngle * 3.0f / 2.0f),
         previewScale * sin(_Pi / -2.0f - Agent::searchAngleOffset - Agent::searchAngle * 3.0f / 2.0f)
     ) + previewPos);
+
+    tex.clear(Color::Transparent);
+    for (int i = 0; i < searchPreview.size(); i++) {
+		tex.draw(searchPreview[i]);
+	}
+    tex.display();
+
+    sfgImage->SetImage(tex.getTexture().copyToImage());
 }
 
 float getMagnitude(int i) {
@@ -269,6 +207,31 @@ Vector3f processAudio(array<array<float,2>,3> &bucketFrequencies, Vector3f freqF
     );
 }
 
+sf::Image processImageFromFile(string path) {
+    sf::Image im;
+    im.loadFromFile("images/" + path);
+    Vector2f imScale(
+        (float)WIDTH / im.getSize().x,
+        (float)HEIGHT / im.getSize().y
+    );
+
+    //rescale cat image to fit screen
+    sf::Image newIm;
+    newIm.create(WIDTH, HEIGHT);
+    for (int x = 0; x < WIDTH; x++) {
+        for (int y = 0; y < HEIGHT; y++) {
+
+            int imx = x / imScale.x;
+            int imy = y / imScale.y;
+
+            Color c = im.getPixel(imx, imy);
+            newIm.setPixel(x, y, c);
+        }
+    }
+
+    return newIm;
+}
+
 int main()
 {
     Vector2f scale((float)WINDOW_WIDTH / WIDTH, (float)WINDOW_HEIGHT / HEIGHT);
@@ -281,6 +244,29 @@ int main()
     constexpr int maxPts = 10000;
 
     srand(time(NULL));
+
+    //collect paths to image resources
+    fs::path path = fs::current_path() / "./images";
+    vector<string> imagePaths;
+    if (fs::exists(path) && fs::is_directory(path)) {
+        // Iterate over the contents of the directory
+        for (const auto& entry : fs::directory_iterator(path)) {
+            if (entry.is_regular_file()) {
+
+                string fileName = entry.path().filename().string();
+
+                string ext = fileName.substr(fileName.find_last_of(".") + 1);
+
+                if (ext == "jpg" || ext == "png") {
+                    // Add the image file name to the vector
+                    imagePaths.push_back(fileName.substr(fileName.find_last_of("/") + 1));
+                } 
+            }
+        }
+    }
+    else {
+        std::cerr << "Directory does not exist or is not a directory: " << path << std::endl;
+    }
 
     //--------------------------------------------------------------------------------
     // SFML Initialization
@@ -295,6 +281,7 @@ int main()
     float frameTimeMS = 1000.0 / desiredFPS;
 
     RenderWindow window(VideoMode(WINDOW_WIDTH, WINDOW_HEIGHT), "Color Thing");
+    window.setFramerateLimit(0);
 
     RenderTexture worldTex;
     worldTex.create(WINDOW_WIDTH, WINDOW_HEIGHT);
@@ -316,21 +303,23 @@ int main()
     tex.create(WIDTH, HEIGHT);
     tex.setRepeated(true);
 
-    Image im = rt.getTexture().copyToImage();
+    sf::Image im = rt.getTexture().copyToImage();
+
+    
 
     Sprite sp;
     sp.setTexture(rt.getTexture());
     sp.setScale(scale);
 
-    Font font;
-    if (!font.loadFromFile("Roboto-Light.ttf")) {
+    shared_ptr<Font> font = make_shared<Font>();
+    if (!font->loadFromFile("Roboto-Light.ttf")) {
         cout << "font error" << endl;
         return -1;
     }
 
     //shader for pixel disperse and dimming effect
-    float dimRate = 0.005;
-    float disperseFactor = 0.3;
+    float dimRate = 0.005f;
+    float disperseFactor = 0.3f;
     Shader shader;
     shader.loadFromFile("Shader.frag", Shader::Fragment);
     shader.setUniform("texture", tex);
@@ -344,7 +333,6 @@ int main()
     Clock colorAlternateTimer;
     Clock timer;
     int frameCount = 0;
-
 
     //--------------------------------------------------------------------------------
     //Audio Visualization Init
@@ -362,18 +350,18 @@ int main()
             inputDevices.push_back(devices[i]);
             deviceNames.push_back(info.name);
         }
-            
+
     }
-    float deviceIndex = 0;
-    float deviceId = 0;
+    int deviceIndex = 0;
+    int deviceId = 0;
     if (inputDevices.size() == 0)
         cout << "No audio input devices detected\n";
     else {
         cout << inputDevices.size() << " input devices detected\n";
     }
-    
+
     RtAudio::StreamParameters parameters;
-    if(devices.size() > 0) parameters.deviceId = devices[deviceId];
+    if (devices.size() > 0) parameters.deviceId = devices[deviceId];
     parameters.nChannels = 1;
     parameters.firstChannel = 0;
 
@@ -391,7 +379,6 @@ int main()
         array<float,2>{2000, 44100}
     };
 
-
     //--------------------------------------------------------------------------------
     //Agent Initialiations 
     //--------------------------------------------------------------------------------
@@ -400,7 +387,7 @@ int main()
     Agent::height = HEIGHT;
 
     //spawn agents
-    float agentCount = 10000;
+    int agentCount = 10000;
     vector<Agent> agentList;
     for (int i = 0; i < agentCount; i++) {
         agentList.push_back(Agent());
@@ -414,240 +401,279 @@ int main()
     // GUI Initialization
     //--------------------------------------------------------------------------------
 
-    Vector2f previewPos(100, 450);
-    vector<ConvexShape> searchPreview = { ConvexShape(), ConvexShape(), ConvexShape() };
-    updatePreview(searchPreview, previewPos, 50);
+    SFGUI sfgui;
+    Desktop desktop;
 
-    int currentSetting = 0;
-    int currentGroup = 0;
-    vector<SettingGroup> groups = {
-        SettingGroup("Agent Options"),
-        SettingGroup("Shader Options"),
-        SettingGroup("Color Options"),
-        SettingGroup("Oscillation Options"),
-        SettingGroup("Audio Visualization")
+    desktop.GetEngine().LoadThemeFromFile("style.theme");
+    desktop.GetEngine().GetResourceManager().SetDefaultFont(font);
+
+    sf::Image matchImage = processImageFromFile(imagePaths[0]);
+
+    GUIBase gui;
+    gui.addToDesktop(desktop);
+    gui.Refresh();
+
+    RenderTexture guiTexture;
+    guiTexture.create(guiOptions.guiSize.x, guiOptions.guiSize.y);
+    Sprite guiSprite(guiTexture.getTexture());
+
+    bool useSimple = false;
+    bool useCuda = false;
+    bool imageMatch = false;
+
+    RenderTexture searchPreviewTex;
+    searchPreviewTex.create(200, 200);
+
+    sfg::Image::Ptr searchPreviewGUIImage;
+    searchPreviewGUIImage = sfg::Image::Create();
+    searchPreviewGUIImage->SetImage(searchPreviewTex.getTexture().copyToImage());
+
+    Vector2f previewPos(100, 100);
+    auto updateSearchPreview = [&]() {
+        updatePreview(searchPreviewTex, searchPreviewGUIImage, previewPos, 75);
     };
+    
+    updateSearchPreview();
 
-    float useSimple = -1.0f;
-    float useCuda = -1.0f;
+    shared_ptr<GUITab> settingsTab = make_shared<GUITab>("Parameters");
+    gui.addTab(settingsTab);
 
-    //settings manipulated by GUI
-    //name, val pointer, change rate, format rule, ? shader uniform name, function called on val change
-    //formatting rule: 0 - decimal number, 1 - scaled decimal, 2 - integer number, 3 - angle , 4 - boolean, 5 mapped to string vector
-    groups[0].settings = {
-        Setting("Agent Count:", &agentCount, 10, 2, [&]() {
+    //agent settings
+    shared_ptr<DropDown> agentOptions = make_shared<DropDown>("Agent");
+    settingsTab->addItem(*agentOptions);
+
+    vector<shared_ptr<SettingBase<void>>> agentOptionsList;
+    shared_ptr<Setting<int>> s_agentCount = make_shared<Setting<int>>(
+        &agentCount, "Count", [&] {
             if (agentCount <= 0)
-                agentCount == 1;
+                agentCount = 1;
             else if (agentCount >= maxAgents)
                 agentCount = maxAgents;
             while (agentList.size() < agentCount) {
                 agentList.push_back(Agent());
-                indices.push_back(agentList.size()-1);
+                indices.push_back(agentList.size() - 1);
             }
             while (agentList.size() > agentCount) {
                 agentList.pop_back();
                 indices.pop_back();
             }
-        }),
-        Setting("Speed:", &Agent::speed, 0.05f, 0, [&]() {}),
-        Setting("Turn Factor:", &Agent::turnFactor, 0.01f, 0, [&]() {}),
-        Setting("Randomness:", &Agent::randFactor, 0.05f, 0, [&]() {}),
-        Setting("Bias:", &Agent::biasFactor, 0.05f, 0, [&]() {}),
-        Setting("Repulsion:", &Agent::repulsion, 0.01f, 0, [&]() {}),
-        Setting("Search Size:", &Agent::searchSize, 1.0f, 0, [&]() {
-            if (useSimple > 0)
+        }
+    );
+    agentOptions->addItem(*s_agentCount);
+
+    shared_ptr<Setting<float>> s_agentSpeed = make_shared<Setting<float>>(
+        &Agent::speed, "Speed");
+    agentOptions->addItem(*s_agentSpeed);
+
+    shared_ptr<Setting<float>> s_agentTurnFactor = make_shared<Setting<float>>(
+        &Agent::turnFactor, "TurnFactor");
+    agentOptions->addItem(*s_agentTurnFactor);
+
+    shared_ptr<Setting<float>> s_agentRandomness = make_shared<Setting<float>>(
+        &Agent::randFactor, "Randomness");
+    agentOptions->addItem(*s_agentRandomness);
+
+    shared_ptr<Setting<float>> s_agentBias = make_shared<Setting<float>>(
+        &Agent::biasFactor, "Bias");
+    agentOptions->addItem(*s_agentBias);
+
+    shared_ptr<Setting<float>> s_agentRepulsion = make_shared<Setting<float>>(
+        &Agent::repulsion, "Repulsion");
+    agentOptions->addItem(*s_agentRepulsion);
+
+
+    //search settings
+    shared_ptr<DropDown> searchOptions = make_shared<DropDown>("Search Pattern");
+    settingsTab->addItem(*searchOptions);
+
+    searchOptions->addItem(searchPreviewGUIImage);
+
+    shared_ptr<Setting<float>> s_searchSize = make_shared<Setting<float>>(
+        &Agent::searchSize, "Distance", [&] {
+            if (useSimple)
                 Agent::generateNormTriangleSimple();
             else
                 Agent::generateNormTriangle(maxPts);
-        }),
-        Setting("Search Angle:", &Agent::searchAngle, _Pi / 360.0f, 3, [&]() {
-            if (useSimple > 0)
+        });
+    searchOptions->addItem(*s_searchSize);
+
+    shared_ptr<Setting<float>> s_searchAngle = make_shared<Setting<float>>(
+        &Agent::searchAngle, "Angle", Agent::searchAngle * 180.0f / _Pi, [&] {
+            if (useSimple)
                 Agent::generateNormTriangleSimple();
             else
                 Agent::generateNormTriangle(maxPts);
-            updatePreview(searchPreview, previewPos, 50);
-        }),
-        Setting("Angle Offset:", &Agent::searchAngleOffset, _Pi / 360.0f, 3, [&]() {
-            updatePreview(searchPreview, previewPos, 50);
-        }),
-        Setting("Simple Search:", &useSimple, 0.0f, 4, [&]() {
-            *groups[currentGroup].settings[currentSetting - 1].val *= -1.0f;
-            if (useSimple > 0)
+            updateSearchPreview();
+        });
+    s_searchAngle->setInputFunction([](float f) { return _Pi * f / 180.0f; });
+    searchOptions->addItem(*s_searchAngle);
+
+    shared_ptr<Setting<float>> s_searchAngleOffset = make_shared<Setting<float>>(
+        &Agent::searchAngleOffset, "Angle Offset", [&] {
+            if (useSimple)
                 Agent::generateNormTriangleSimple();
             else
                 Agent::generateNormTriangle(maxPts);
-        }),
-        Setting("GPU Search:", &useCuda, 0.0f, 4, [&]() {
-            if (cudaCapable) {
-                *groups[currentGroup].settings[currentSetting - 1].val *= -1.0f;
+            updateSearchPreview();
+        });
+    s_searchAngleOffset->setInputFunction([](float f) { return _Pi * f / 180.0f; });
+    searchOptions->addItem(*s_searchAngleOffset);
+
+    shared_ptr<Setting<bool>> s_simpleSearch = make_shared<Setting<bool>>(
+        &useSimple, "Simple Search", [&] {
+            if (useSimple)
+                Agent::generateNormTriangleSimple();
+            else
+                Agent::generateNormTriangle(maxPts);
+        });
+    searchOptions->addItem(*s_simpleSearch);
+
+    shared_ptr<Setting<bool>> s_useCuda = make_shared<Setting<bool>>(
+        &useCuda, "GPU Acceleration");
+    searchOptions->addItem(*s_useCuda);
+
+
+    //shader settings
+    shared_ptr<DropDown> shaderOptions = make_shared<DropDown>("Shader");
+    settingsTab->addItem(*shaderOptions);
+
+    shared_ptr<Setting<float>> s_dimRate = make_shared<Setting<float>>(
+        &dimRate, "Dim Rate", dimRate * 100.0f, [&] {
+            shader.setUniform("dimRate", dimRate);
+        });
+    s_dimRate->setInputFunction([](float f) { return f / 100.0f; });
+    shaderOptions->addItem(*s_dimRate);
+
+    shared_ptr<Setting<float>> s_disperseFactor = make_shared<Setting<float>>(
+        &disperseFactor, "Fuzzying", [&] {
+            shader.setUniform("disperseFactor", disperseFactor);
+        });
+    shaderOptions->addItem(*s_disperseFactor);
+
+
+    //Color Settings
+    shared_ptr<DropDown> colorOptions = make_shared<DropDown>("Color Palette");
+    settingsTab->addItem(*colorOptions);
+
+    Button::Ptr resetColorButton = Button::Create("Reset Color");
+    resetColorButton->GetSignal(Button::OnLeftClick).Connect([&]() {
+		for_each(execution::par_unseq, agentList.begin(), agentList.end(),
+			[&](auto&& a) {
+				a.randomizeColorBase();
+			});
+	});
+    colorOptions->addItem(resetColorButton);
+
+    shared_ptr<Setting<float>> s_paletteR = make_shared<Setting<float>>(
+        &Agent::palette.x, "Red", [&] {
+            for_each(execution::par_unseq, agentList.begin(), agentList.end(),
+            [&](auto&& a) {
+                    a.updateColor();
+                });
+        });
+    colorOptions->addItem(*s_paletteR);
+
+    shared_ptr<Setting<float>> s_paletteG = make_shared<Setting<float>>(
+        &Agent::palette.y, "Green", [&] {
+            for_each(execution::par_unseq, agentList.begin(), agentList.end(),
+            [&](auto&& a) {
+                    a.updateColor();
+                });
+        });
+    colorOptions->addItem(*s_paletteG);
+
+    shared_ptr<Setting<float>> s_paletteB = make_shared<Setting<float>>(
+        &Agent::palette.z, "Blue", [&] {
+            for_each(execution::par_unseq, agentList.begin(), agentList.end(),
+            [&](auto&& a) {
+                    a.updateColor();
+                });
+        });
+    colorOptions->addItem(*s_paletteB);
+
+    int imageIndex = 0;
+    shared_ptr<Setting<int>> s_imageIndex = make_shared<Setting<int>>(
+        &imageIndex, "Image", imagePaths
+    );
+    colorOptions->addItem(*s_imageIndex);
+
+    shared_ptr<Setting<bool>> s_matchImage = make_shared<Setting<bool>>(
+        &imageMatch, "Image Match", [&] {
+            if(imagePaths.size() == 0)
+				imageMatch = false;
+            else {
+                matchImage = processImageFromFile(imagePaths[imageIndex]);
             }
-        }),
-    };
-    
-    groups[1].settings = {
-        Setting("Dim Rate:", &dimRate, 0.0001f, 1, "dimRate", [&]() {
-            shader.setUniform(
-                groups[currentGroup].settings[currentSetting - 1].shaderVar,
-                *groups[currentGroup].settings[currentSetting - 1].val
-            );
-        }),
-        Setting("Disperse:", &disperseFactor, 0.01f, 0, "disperseFactor", [&]() {
-            shader.setUniform(
-                groups[currentGroup].settings[currentSetting - 1].shaderVar,
-                *groups[currentGroup].settings[currentSetting - 1].val
-            );
-        })
-    };
+        }
+    );
+    colorOptions->addItem(*s_matchImage);
 
-    groups[2].settings = {
-        Setting("PaletteR:", &Agent::palette.x, 0.01f, 0, [&]() {
-            std::for_each(execution::par_unseq, agentList.begin(), agentList.end(), [&](auto&& a) {
-                a.updateColor();
-            });
-        }),
-        Setting("PaletteG:", &Agent::palette.y, 0.01f, 0, [&]() {
-            std::for_each(execution::par_unseq, agentList.begin(), agentList.end(), [&](auto&& a) {
-                a.updateColor();
-            });
-        }),
-        Setting("PaletteB:", &Agent::palette.z, 0.01f, 0, [&]() {
-            std::for_each(execution::par_unseq, agentList.begin(), agentList.end(), [&](auto&& a) {
-                a.updateColor();
-            });
-        })
-    };
+    float imageMatchRate = 1.0f;
 
-    groups[3].settings = {
-        Setting("Global:", &Agent::alternate, 0.0f, 4, [&]() {
-            *groups[currentGroup].settings[currentSetting - 1].val *= -1.0f;
-            colorAlternateTimer.restart();
-        }),
-        Setting("\tR Period:", &Agent::globalPeriodR, 0.1f, 0, [&]() {}),
-        Setting("\tG Period:", &Agent::globalPeriodG, 0.1f, 0, [&]() {}),
-        Setting("\tB Period:", &Agent::globalPeriodB, 0.1f, 0, [&]() {}),
-        Setting("Distance:", &Agent::distAlternate, 0.0f, 4, [&]() {
-            *groups[currentGroup].settings[currentSetting - 1].val *= -1.0f;
-            colorAlternateTimer.restart();
-        }),
-        Setting("\tR Distance:", &Agent::distR, 1.0f, 2, [&]() {}),
-        Setting("\tG Distance:", &Agent::distG, 1.0f, 2, [&]() {}),
-        Setting("\tB Distance:", &Agent::distB, 1.0f, 2, [&]() {}),
-        Setting("\tR Period:", &Agent::distPeriodR, 0.1f, 0, [&]() {}),
-        Setting("\tG Period:", &Agent::distPeriodG, 0.1f, 0, [&]() {}),
-        Setting("\tB Period:", &Agent::distPeriodB, 0.1f, 0, [&]() {}),
-    };
-    
-    groups[4].settings = {
-        Setting("Input Device:", &deviceIndex, 1.0f, 5, deviceNames, [&]() {
+    shared_ptr<Setting<float>> s_imageMatchRate = make_shared<Setting<float>>(
+        &imageMatchRate, "Image Match Factor");
+    colorOptions->addItem(*s_imageMatchRate);
 
-            if (deviceIndex >= inputDevices.size()) deviceIndex = 0;
-            if (deviceIndex < 0) deviceIndex = inputDevices.size() - 1;
+    //Audio Settings
+    shared_ptr<DropDown> audioOptions = make_shared<DropDown>("Audio");
+    settingsTab->addItem(*audioOptions);
+
+    shared_ptr<Setting<int>> s_inputDevice = make_shared<Setting<int>>(
+        &deviceIndex, "Input Device", deviceNames, [&] {
 
             deviceId = inputDevices[deviceIndex];
 
             if (adc.isStreamRunning())
                 adc.stopStream();
-            
+
             if (adc.isStreamOpen())
                 adc.closeStream();
-            
+
             parameters.deviceId = inputDevices[deviceIndex];
 
             if (Agent::audioAlternate > 0) {
                 adc.openStream(nullptr, &parameters, RTAUDIO_FLOAT32, AUDIO_FREQUENCY, &bufferFrames, &recordCallback, (void*)&AUDIO_BUFFER);
                 adc.startStream();
             }
-        }),
-        Setting("Enable:", &Agent::audioAlternate, 0.0f, 4, [&]() {
-            *groups[currentGroup].settings[currentSetting - 1].val *= -1.0f;
-            if (Agent::audioAlternate > 0) {
+        }
+    );
+    audioOptions->addItem(*s_inputDevice);
 
-                if (adc.isStreamRunning())
-                    adc.stopStream();
+    shared_ptr<Setting<bool>> s_enableAudioInput = make_shared<Setting<bool>>(
+        &Agent::audioAlternate, "Enable", [&] {
+        if (Agent::audioAlternate > 0) {
 
-                if (adc.isStreamOpen())
-                    adc.closeStream();
+            if (adc.isStreamRunning())
+                adc.stopStream();
 
-                parameters.deviceId = inputDevices[deviceIndex];
+            if (adc.isStreamOpen())
+                adc.closeStream();
 
-                adc.openStream(nullptr, &parameters, RTAUDIO_FLOAT32, AUDIO_FREQUENCY, &bufferFrames, &recordCallback, (void*)&AUDIO_BUFFER);
-                adc.startStream();
+            parameters.deviceId = inputDevices[deviceIndex];
 
-            } else {
-                if (adc.isStreamRunning())
-                    adc.stopStream();
-                if (adc.isStreamOpen())
-                    adc.closeStream();
-            }
-        }),
+            adc.openStream(nullptr, &parameters, RTAUDIO_FLOAT32, AUDIO_FREQUENCY, &bufferFrames, &recordCallback, (void*)&AUDIO_BUFFER);
+            adc.startStream();
 
-        Setting("\tR Factor:", &rFac, 0.01f, 0, [&]() {}),
-        Setting("\tR Low:", &frequencies[0][0], 1.00f, 2, [&]() {
-            if (frequencies[0][0] < 0) frequencies[0][0] = 0;
-            if (frequencies[0][0] > AUDIO_FREQUENCY) frequencies[0][0] = AUDIO_FREQUENCY;
-        }),
-        Setting("\tR High:", &frequencies[0][1], 1.00f, 2, [&]() {
-            if (frequencies[0][1] < 0) frequencies[0][1] = 0;
-            if (frequencies[0][1] > AUDIO_FREQUENCY) frequencies[0][1] = AUDIO_FREQUENCY;
-        }),
+        }
+        else {
+            if (adc.isStreamRunning())
+                adc.stopStream();
+            if (adc.isStreamOpen())
+                adc.closeStream();
+        }
+    });
+    audioOptions->addItem(*s_enableAudioInput);
 
-        Setting("\tG Factor:", &gFac, 0.01f, 0, [&]() {}),
-        Setting("\tG Low:", &frequencies[1][0], 1.00f, 2, [&]() {
-            if (frequencies[1][0] < 0) frequencies[1][0] = 0;
-            if (frequencies[1][0] > AUDIO_FREQUENCY) frequencies[1][0] = AUDIO_FREQUENCY;
-        }),
-        Setting("\tG High:", &frequencies[1][1], 1.00f, 2, [&]() {
-            if (frequencies[1][1] < 0) frequencies[1][1] = 0;
-            if (frequencies[1][1] > AUDIO_FREQUENCY) frequencies[1][1] = AUDIO_FREQUENCY;
-        }),
 
-        Setting("\tB Factor:", &bFac, 0.01f, 0, [&]() {}),
-        Setting("\tB Low:", &frequencies[2][0], 1.00f, 2, [&]() {
-            if (frequencies[2][0] < 0) frequencies[2][0] = 0;
-            if (frequencies[2][0] > AUDIO_FREQUENCY) frequencies[2][0] = AUDIO_FREQUENCY;
-        }),
-        Setting("\tB High:", &frequencies[2][1], 1.00f, 2, [&]() {
-            if (frequencies[2][1] < 0) frequencies[2][1] = 0;
-            if (frequencies[2][1] > AUDIO_FREQUENCY) frequencies[2][1] = AUDIO_FREQUENCY;
-        })
-    };
+
 
     int fps = 0;
-    Text fpsCounter(std::to_string(fps), font, 20);
+    Text fpsCounter(std::to_string(fps), *font, 20);
     fpsCounter.setFillColor(Color::White);
+    fpsCounter.setPosition(Vector2f(WINDOW_WIDTH - 100, 0));
 
-    RectangleShape guiBase;
-    Vector2f guiPos(0, 0);
-    guiBase.setFillColor(Color(50, 50, 50, 150));
-    guiBase.setSize(Vector2f(240, 545));
-    guiBase.setPosition(guiPos);
-
-    RectangleShape selectedHighlight;
-    selectedHighlight.setFillColor(Color(100, 100, 100, 150));
-    selectedHighlight.setSize(Vector2f(240, 20));
-
-    for (int g = 0; g < groups.size(); g++) {
-        groups[g].groupText = Text(groups[g].name, font, 20);
-        groups[g].groupText.setFillColor(Color::Yellow);
-        groups[g].groupText.setPosition(Vector2f(guiBase.getPosition().x, guiBase.getPosition().y + 30));
-        for (int s = 0; s < groups[g].settings.size(); s++) {
-            groups[g].settings[s].settingText = Text(groups[g].settings[s].name, font, 20);
-            groups[g].settings[s].settingText.setFillColor(Color::White);
-            groups[g].settings[s].settingText.setPosition(Vector2f(guiBase.getPosition().x, guiBase.getPosition().y + 30 * (s + 2)));
-            groups[g].settings[s].valText = Text(getSettingString(
-                    *groups[g].settings[s].val,
-                    groups[g].settings[s].rule,
-                    groups[g].settings[s].mappedVals
-                ), font, 20);
-            groups[g].settings[s].valText.setFillColor(Color::White);
-            groups[g].settings[s].valText.setPosition(Vector2f(guiBase.getPosition().x + 160, guiBase.getPosition().y + 30 * (s + 2)));
-        }
-    }
-
-    selectedHighlight.setPosition(groups[0].groupText.getPosition());
-
+    
     bool hideGUI = false;
-
 
     //--------------------------------------------------------------------------------
     //cuda initialization
@@ -711,6 +737,8 @@ int main()
 
     if (cudaCapable) {
 
+        window.resetGLStates();
+
         inputData = new SearchInput[maxAgents];
         outputData = new SearchOutput[maxAgents];
         ptData = new Point[maxPts];
@@ -758,53 +786,25 @@ int main()
 
         //Event management, handle parameter changing
         //current setting = 0 indicates a setting group is selected and can be changed, >0 are the settings within that setting group
-        bool settingAltered = false;
-        bool settingSelected = false;
+        bool skipSFGUI = false;
         while (window.pollEvent(event)) {
 
             if (event.type == Event::Closed) {
                 window.close();
-                break;
             }
-                
+
             if (event.type == Event::KeyPressed) {
 
-                //setting manipulation
-                float multiplier = 1;
-                multiplier *= Keyboard::isKeyPressed(Keyboard::LShift) ? 10 : 1;
-                multiplier *= Keyboard::isKeyPressed(Keyboard::LControl) ? 10 : 1;
-                if (event.key.code == Keyboard::Right) {
-                    if (currentSetting == 0) {
-                        currentGroup = ((currentGroup + 1) % groups.size());
-                    }
-                    else {
-                        settingAltered = true;
-                        *groups[currentGroup].settings[currentSetting - 1].val += groups[currentGroup].settings[currentSetting - 1].delta * multiplier;
-                    }
-                }
-                if (event.key.code == Keyboard::Left) {
-                    if (currentSetting == 0) {
-                        currentGroup = ((currentGroup - 1) < 0 ? groups.size() - 1 : currentGroup - 1);
-                    }
-                    else {
-                        settingAltered = true;
-                        *groups[currentGroup].settings[currentSetting - 1].val -= groups[currentGroup].settings[currentSetting - 1].delta * multiplier;
-                    }
-                }
-                if (event.key.code == Keyboard::Up) {
-                    settingSelected = true;
-                    currentSetting = (currentSetting - 1 < 0 ? groups[currentGroup].settings.size() : currentSetting - 1);
-                }
-                if (event.key.code == Keyboard::Down) {
-                    settingSelected = true;
-                    currentSetting = (currentSetting + 1) % (groups[currentGroup].settings.size() + 1);
+                if (event.key.code == Keyboard::Enter) {
+                    KeyManager::enter = true;
                 }
 
                 //hide gui
                 if (event.key.code == Keyboard::H) {
                     hideGUI = !hideGUI;
+                    skipSFGUI = true;
                 }
-
+                    
                 //reset view
                 if (event.key.code == Keyboard::R) {
                     view.setCenter(Vector2f(WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2));
@@ -812,6 +812,15 @@ int main()
                     accZoom = 1;
                     worldTex.setView(view);
                 }
+
+            }
+
+            if (event.type == Event::Resized) {
+                Vector2f scale(
+                    (float) WINDOW_WIDTH / event.size.width,
+                    (float)WINDOW_HEIGHT / event.size.height
+                );
+                guiSprite.setScale(scale);
             }
 
             //view zooming
@@ -820,34 +829,16 @@ int main()
                 if (event.mouseWheelScroll.delta > 0) {
                     view.zoom(0.9f);
                     accZoom *= 0.9f;
-                } else {
+                }
+                else {
                     view.zoom(1.1f);
                     accZoom *= 1.1f;
                 }
                 worldTex.setView(view);
             }
-        }
 
-        if (settingAltered || settingSelected) {
-            if (settingAltered && currentSetting != 0) 
-                groups[currentGroup].settings[currentSetting - 1].action();
-
-            if (settingSelected) {
-                if (currentSetting == 0) 
-                    selectedHighlight.setPosition(groups[currentGroup].groupText.getPosition());
-                else
-                    selectedHighlight.setPosition(groups[currentGroup].settings[currentSetting - 1].settingText.getPosition() + Vector2f(0, 2));
-            }
-
-            if (currentSetting != 0) {
-
-                groups[currentGroup].settings[currentSetting - 1].valText.setString(
-                    getSettingString(*groups[currentGroup].settings[currentSetting - 1].val,
-                        groups[currentGroup].settings[currentSetting - 1].rule,
-                        groups[currentGroup].settings[currentSetting - 1].mappedVals
-                    )
-                );
-            }
+            //pass event to SFGUI
+            if(!hideGUI && !skipSFGUI) desktop.HandleEvent(event);
         }
 
         //mouse drag
@@ -877,7 +868,7 @@ int main()
             }
 
             //GPU accelerated agent searches
-            if (useCuda > 0) {
+            if (useCuda) {
 
                 //copy image data
                 /*const unsigned char* pixelData = im.getPixelsPtr();
@@ -935,6 +926,12 @@ int main()
                         );
 
                     //perform agent operations
+
+                    if (imageMatch) agentList[i].updateColorBase(
+                        matchImage.getPixel(agentList[i].getPos().x, agentList[i].getPos().y),
+                        imageMatchRate
+                    );
+
                     agentList[i].colorFilters(colorAlternateTimer.getElapsedTime().asMilliseconds());
                     agentList[i].updateDir();
                     agentList[i].updatePos(im);
@@ -953,6 +950,11 @@ int main()
 
                     //decision making based on search results
                     agentList[i].updateDir();
+
+                    if(imageMatch) agentList[i].updateColorBase(
+                        matchImage.getPixel(agentList[i].getPos().x, agentList[i].getPos().y),
+                        imageMatchRate
+                    );
 
                     //color filters
                     agentList[i].colorFilters(colorAlternateTimer.getElapsedTime().asMilliseconds());
@@ -995,17 +997,17 @@ int main()
 
             //GUI drawing
             if (!hideGUI) {
-                window.draw(guiBase);
-                window.draw(selectedHighlight);
+
+                desktop.Update(clock.getElapsedTime().asSeconds());
+
+                guiTexture.clear(Color::Transparent);
+                guiTexture.draw(gui.getBackground());
+
+                sfgui.Display(guiTexture);
+                guiTexture.display();
+
+                window.draw(guiSprite);
                 window.draw(fpsCounter);
-                window.draw(groups[currentGroup].groupText);
-                for (int i = 0; i < groups[currentGroup].settings.size(); i++) {
-                    window.draw(groups[currentGroup].settings[i].settingText);
-                    window.draw(groups[currentGroup].settings[i].valText);
-                }
-                if(currentGroup == 0) for (int i = 0; i < 3; i++) {
-                    window.draw(searchPreview[i]);
-                }
             }
             
             window.display();
@@ -1018,6 +1020,8 @@ int main()
                 timer.restart();
             }
         }
+
+        KeyManager::reset();
     }
 
     if (cudaCapable) {

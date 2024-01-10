@@ -1,10 +1,9 @@
 #pragma once
-#include "SFML\Graphics.hpp"
-#include <math.h>
-#include <array>
 
-using namespace std;
-using namespace sf;
+#include "SFML\Graphics.hpp"
+
+#include <array>
+#include <vector>
 
 class Agent {
 public:
@@ -35,35 +34,39 @@ public:
 
     static float fract;
 
-    static Vector3f palette;
+    static sf::Vector3f palette;
 
-    static float audioAlternate;
-    static Vector3f audioMod;
+    static bool audioAlternate;
+    static sf::Vector3f audioMod;
 
     static int width;
     static int height;
 
-    static vector<Vector2i> normTriangle;
+    static std::vector<sf::Vector2i> normTriangle;
 
     bool debug = false;
 
-    array<Vector3f, 3> avgColors = {
-        Vector3f(),
-        Vector3f(),
-        Vector3f()
+    std::array<sf::Vector3f, 3> avgColors = {
+        sf::Vector3f(),
+        sf::Vector3f(),
+        sf::Vector3f()
     };
 
     Agent();
 
     void colorFilters(float time);
 
+    void updateColorBase(sf::Color c, float rate);
+
+    void randomizeColorBase();
+
     void updateColor();
 
     void alternateColor(float time);
 
-    Vector2f getPos();
+    sf::Vector2f getPos();
 
-    void updatePos(Image& im);
+    void updatePos(sf::Image& im);
 
     void updateDir();
 
@@ -75,16 +78,16 @@ public:
 
     static void generateNormTriangleSimple();
 
-    void searchImage(Image& im);
+    void searchImage(sf::Image& im);
 
 private:
 
     //agent properties
-    Vector2f pos;
-    Vector2f vel;
+    sf::Vector2f pos;
+    sf::Vector2f vel;
     float dir;
-    Color color;
-    Vector3f colorBase;
+    sf::Color color;
+    sf::Vector3f colorBase;
 
     float cosfRatio(float val);
 
@@ -92,7 +95,7 @@ private:
 
     void alterDir(float delta);
 
-    float compare(Vector3f a, Vector3f b);
+    float compare(sf::Vector3f a, sf::Vector3f b);
 
-    Vector3f norm(Vector3f v);
+    sf::Vector3f norm(sf::Vector3f v);
 };

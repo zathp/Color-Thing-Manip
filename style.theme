@@ -1,0 +1,22 @@
+Entry.valid {
+
+}
+
+Entry.invalid {
+	BorderColor: #ff0000ff;
+	BorderWidth: 2;
+}
+
+Label.group {
+	FontSize: 20;
+}
+
+Label.setting {
+	FontSize: 15;
+}
+
+Button.dropdown {
+	FontSize: 20;
+	Padding: 5;
+}
+
