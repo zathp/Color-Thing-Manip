@@ -1,215 +1,310 @@
-#include "Agent.h"
-
-#include <random>
-#include <math.h>
-#include <iostream>
-#include <execution>
-
-#pragma warning(disable: 26495)
-#pragma warning(disable: 4244)
-#pragma warning(disable: 4267)
+﻿#include "Agent.hpp"
 
 using namespace std;
 using namespace sf;
 
-float Agent::pi = 3.141592653589793f;
+shared_ptr<GLOBAL_SETTINGS> Agent::GlobalSettings = nullptr;
 
-float Agent::speed = 1.0f;
-float Agent::turnFactor = 1.0f;
-float Agent::randFactor = 1.0f;
-float Agent::biasFactor = 2.0f;
-float Agent::repulsion = 0.0f;
-float Agent::searchSize = 10;
-float Agent::searchAngle = pi / 6;
-float Agent::searchAngleOffset = 0;
-
-float Agent::alternate = -1.0f;
-float Agent::globalPeriodR = 50.0f;
-float Agent::globalPeriodG = 70.0f;
-float Agent::globalPeriodB = 30.0f;
-
-float Agent::distAlternate = -1.0f;
-float Agent::distR = 500.0f;
-float Agent::distG = 1000.0f;
-float Agent::distB = 2000.0f;
-float Agent::distPeriodR = 30.0f;
-float Agent::distPeriodG = 70.0f;
-float Agent::distPeriodB = 50.0f;
-
-bool Agent::audioAlternate = false;
-
-Vector3f Agent::palette = Vector3f(1.0f, 1.0f, 1.0f);
-
-Vector3f Agent::audioMod = Vector3f(1, 1, 1);
-
-int Agent::width = 800;
-int Agent::height = 450;
-
-vector<Vector2i> Agent::normTriangle(0);
+glm::mat3 Agent::colorMap = glm::mat3(1.0f);
 
 //public members
-Agent::Agent() {
+
+Agent::Agent(int id) {
+
+	this->id = id;
+
     //spawn agent with a random position, velocity, and base color
-    pos.x = rand() % width;
-    pos.y = rand() % height;
-    dir = (float)(rand() % 10000) / 10000 * 2 * pi;
+    pos.x = rand() % WIDTH;
+    pos.y = rand() % HEIGHT;
+    dir = (float)(rand() % 10000) / 10000 * 2 * _Pi;
     vel = Vector2f(cos(dir), sin(dir));
 
-    colorBase = Vector3f(
-        (double)(rand() % 206 + 50),
-        (double)(rand() % 206 + 50),
-        (double)(rand() % 206 + 50)
-    );
-
-    updateColor();
-}
-
-void Agent::colorFilters(float time) {
-
-    updateColor();
-
-    if (alternate > 0 || distAlternate > 0)
-        alternateColor(time);
-
-    if (audioAlternate > 0) {
-        color.r *= audioMod.x;
-        color.g *= audioMod.y;
-        color.b *= audioMod.z;
-    }
-
-}
-
-void Agent::updateColorBase(Color c, float rate) {
-    colorBase = Vector3f(
-        colorBase.x + (c.r - colorBase.x) * rate,
-        colorBase.y + (c.g - colorBase.y) * rate,
-        colorBase.z + (c.b - colorBase.z) * rate
-    );
+    randomizeColorBase();
 }
 
 void Agent::randomizeColorBase() {
-	colorBase = Vector3f(
-		(double)(rand() % 206 + 50),
-		(double)(rand() % 206 + 50),
-		(double)(rand() % 206 + 50)
+	colorBase = Color(
+		(float)(rand() % 206 + 50),
+		(float)(rand() % 206 + 50),
+		(float)(rand() % 206 + 50)
 	);
-
 }
 
-void Agent::updateColor() {
-    color.r = colorBase.x * palette.x;
-    color.g = colorBase.y * palette.y;
-    color.b = colorBase.z * palette.z;
+void Agent::updateColorBase(Color c, float rate) {
+    colorBase = Color(
+        colorBase.r + (c.r - colorBase.r) * rate,
+        colorBase.g + (c.g - colorBase.g) * rate,
+        colorBase.b + (c.b - colorBase.b) * rate
+    );
 }
 
-void Agent::alternateColor(float time) {
+void Agent::applyFilter(Vector3f filter) {
+	colorFinal.r *= filter.x;
+	colorFinal.g *= filter.y;
+	colorFinal.b *= filter.z;
+}
 
-    if (alternate > 0) {
-        if (globalPeriodR != 0)
-            color.r *= cosfRatio(
-                time / (globalPeriodR * 1000)
-            );
-        if (globalPeriodG != 0)
-            color.g *= cosfRatio(
-                time / (globalPeriodG * 1000)
-            );
-        if (globalPeriodB != 0)
-            color.b *= cosfRatio(
-                time / (globalPeriodB * 1000)
-            );
+void Agent::applyMapping(glm::mat3 map) {
+
+	glm::vec3 newColor = map * glm::vec3(
+        colorFinal.r,
+        colorFinal.g,
+        colorFinal.b
+    );
+
+	colorFinal.r = newColor.x;
+	colorFinal.g = newColor.y;
+	colorFinal.b = newColor.z;
+}
+
+glm::vec3 rgbToHsv(const glm::vec3& rgb) {
+    float r = rgb.r, g = rgb.g, b = rgb.b;
+    float maxC = std::max({ r, g, b });
+    float minC = std::min({ r, g, b });
+    float delta = maxC - minC;
+
+    float h = 0.f, s = 0.f, v = maxC;
+
+    if (delta != 0.f) {
+        if (maxC == r)
+            h = fmodf((g - b) / delta, 6.f);
+        else if (maxC == g)
+            h = (b - r) / delta + 2.f;
+        else
+            h = (r - g) / delta + 4.f;
+
+        h /= 6.f; // Normalize to [0,1]
+        if (h < 0.f) h += 1.f;
     }
 
-    if (distAlternate > 0) {
+    if (maxC != 0.f)
+        s = delta / maxC;
 
-        Vector2f center(width / 2, height / 2);
-        float dist = sqrt(pow(center.x - pos.x, 2) + pow(center.y - pos.y, 2));
+    return glm::vec3(h, s, v);
+}
 
-        if(distR != 0 && distPeriodR != 0)
-            color.r *= cosfRatio(
-                dist / distR / cosfRatio(
-                    time / (distPeriodR * 1000)
-                )
-            );
-        if (distG != 0 && distPeriodG != 0)
-            color.g *= cosfRatio(
-                dist / distG / cosfRatio(
-                    time / (distPeriodG * 1000)
-                )
-            );
-        if (distB != 0 && distPeriodB != 0)
-            color.b *= cosfRatio(
-                dist / distB / cosfRatio(
-                    time / (distPeriodB * 1000)
-                )
-            );
+// HSV → RGB
+glm::vec3 hsvToRgb(const glm::vec3& hsv) {
+    float h = hsv.x * 6.f; // sector 0–6
+    float s = hsv.y;
+    float v = hsv.z;
+
+    int i = int(h);
+    float f = h - i;
+    float p = v * (1.f - s);
+    float q = v * (1.f - f * s);
+    float t = v * (1.f - (1.f - f) * s);
+
+    switch (i % 6) {
+    case 0: return { v, t, p };
+    case 1: return { q, v, p };
+    case 2: return { p, v, t };
+    case 3: return { p, q, v };
+    case 4: return { t, p, v };
+    case 5: return { v, p, q };
+    }
+    return { 0, 0, 0 };
+}
+
+void Agent::applyMappingHSV(const glm::mat3& hsvMap) {
+    glm::vec3 rgb = { colorFinal.r, colorFinal.g, colorFinal.b };
+    glm::vec3 hsv = rgbToHsv(rgb);
+
+    glm::vec3 mapped = hsvMap * hsv;
+
+    // Clamp HSV to safe ranges
+    mapped.x = fmodf(mapped.x, 1.f); // hue wraps
+    if (mapped.x < 0.f) mapped.x += 1.f;
+    mapped.y = glm::clamp(mapped.y, 0.f, 1.f);
+    mapped.z = glm::clamp(mapped.z, 0.f, 1.f);
+
+    glm::vec3 newRgb = hsvToRgb(mapped);
+    colorFinal.r = newRgb.r;
+    colorFinal.g = newRgb.g;
+    colorFinal.b = newRgb.b;
+}
+
+void Agent::applyHueShift(float hueShift) {
+    glm::vec3 hsv = rgbToHsv(glm::vec3(colorFinal.r, colorFinal.g, colorFinal.b));
+    hsv.x = fmodf(hsv.x + hueShift, 1.0f);
+    if (hsv.x < 0.f) hsv.x += 1.0f;
+
+    glm::vec3 rgb = hsvToRgb(hsv);
+    colorFinal.r = rgb.r;
+    colorFinal.g = rgb.g;
+    colorFinal.b = rgb.b;
+}
+
+Color Agent::hueShift(Color c, float rads) {
+
+	glm::vec3 hsv = rgbToHsv(glm::vec3(c.r, c.g, c.b));
+	hsv.x = fmodf(hsv.x + rads / (2 * _Pi), 1.0f);
+	if (hsv.x < 0.f) hsv.x += 1.0f;
+	glm::vec3 rgb = hsvToRgb(hsv);
+	return Color(
+		static_cast<unsigned char>(rgb.r * 255),
+		static_cast<unsigned char>(rgb.g * 255),
+		static_cast<unsigned char>(rgb.b * 255)
+	);
+}
+
+void Agent::applyColorTransformations(shared_ptr<GROUP_SETTINGS> Settings, float time) {
+
+	const Vector2 center = { WIDTH / 2, HEIGHT / 2 };
+
+    if (Settings->Oscillation.timeOscillationEnabled) {
+        Vector3f globalTimeFilter = {
+            cosfRatio(
+                time / (Settings->Oscillation.globalPeriodR * 1000)
+            ),
+            cosfRatio(
+                time / (Settings->Oscillation.globalPeriodG * 1000)
+            ),
+            cosfRatio(
+                time / (Settings->Oscillation.globalPeriodB * 1000)
+            )
+        };
+		applyFilter(globalTimeFilter);
     }
 
-    
+    if (Settings->Oscillation.distAlternate) {
+		float dist = sqrt(pow(center.x - pos.x, 2) + pow(center.y - pos.y, 2));
+		Vector3f distFilter = {
+			cosfRatio(
+				dist / Settings->Oscillation.distR / cosfRatio(
+					time / (Settings->Oscillation.distPeriodR * 1000)
+				)
+			),
+			cosfRatio(
+				dist / Settings->Oscillation.distG / cosfRatio(
+					time / (Settings->Oscillation.distPeriodG * 1000)
+				)
+			),
+			cosfRatio(
+				dist / Settings->Oscillation.distB / cosfRatio(
+					time / (Settings->Oscillation.distPeriodB * 1000)
+				)
+			)
+		};
+		applyFilter(distFilter);
+    }
+
+    if (GlobalSettings->Audio.audioAlternate) {
+		applyFilter(
+			Vector3f(
+                GlobalSettings->Audio.modR,
+                GlobalSettings->Audio.modG,
+                GlobalSettings->Audio.modB
+			)
+		);
+    }
+
+    if (Settings->Agents.Color.hueRotationEnabled) {
+        float radians = Settings->Agents.Color.hueRotationAngle;
+
+        if (Settings->Agents.Color.hueOscillation) {
+            float oscillation = sinf(time / (Settings->Agents.Color.hueOscillationPeriod * 1000.f));
+            radians += _Pi * oscillation; // oscillates ±π radians
+        }
+
+        float hueShift = radians / (2 * _Pi); // convert to normalized hue offset [0–1]
+        applyHueShift(hueShift);
+    }
 }
 
 Vector2f Agent::getPos() { return pos; }
 
 //place color and advance
-void Agent::updatePos(Image& im) {
+void Agent::updatePos(shared_ptr<GROUP_SETTINGS> Settings, Image& im) {
 
-    im.setPixel(pos.x, pos.y, color);
+    im.setPixel({ static_cast<unsigned int>(pos.x),static_cast<unsigned int>(pos.y) }, colorFinal);
 
-    pos.x += vel.x * speed;
-    pos.y += vel.y * speed;
+    //if (Settings->Agents.interpolateColorDrop) {
+
+    //    float dx = pos.x - px;
+    //    float dy = pos.y - py;
+
+    //    // unwrap X
+    //    if (fabsf(dx) > WIDTH * 0.5f) {
+    //        if (dx > 0) {
+    //            px += WIDTH;  // unwrap across left edge
+    //        }
+    //        else {
+    //            px -= WIDTH;  // unwrap across right edge
+    //        }
+    //        dx = x - px;
+    //    }
+
+    //    // unwrap Y
+    //    if (fabsf(dy) > HEIGHT * 0.5f) {
+    //        if (dy > 0) {
+    //            py += HEIGHT;
+    //        }
+    //        else {
+    //            py -= HEIGHT;
+    //        }
+    //        dy = y - py;
+    //    }
+    //}
+    //else {
+    //    
+    //}
+
+    pos.x += vel.x * Settings->Agents.speed;
+    pos.y += vel.y * Settings->Agents.speed;
 
     //wrap agent positions around screen
     while (pos.x < 0)
-        pos.x += width;
-    while(pos.x >= width)
-        pos.x -= width;
+        pos.x += WIDTH;
+    while(pos.x >= WIDTH)
+        pos.x -= WIDTH;
     while(pos.y < 0)
-        pos.y += height;
-    while(pos.y >= height)
-        pos.y -= height;
+        pos.y += HEIGHT;
+    while(pos.y >= HEIGHT)
+        pos.y -= HEIGHT;
 }
 
-void Agent::updateDir() {
+void Agent::updatePos(shared_ptr<GROUP_SETTINGS> Settings) {
 
-    //determine avg color in zones in front, left, and right of agent
-    //treat colors as a 3d vector for comparing
-    //normalize average color to ignore color intensity when deciding which way to go
+    pos.x += vel.x * Settings->Agents.speed;
+    pos.y += vel.y * Settings->Agents.speed;
 
-    Vector3f me = norm(Vector3f(color.r, color.g, color.b));
+    //wrap agent positions around screen
+    while (pos.x < 0)
+        pos.x += WIDTH;
+    while (pos.x >= WIDTH)
+        pos.x -= WIDTH;
+    while (pos.y < 0)
+        pos.y += HEIGHT;
+    while (pos.y >= HEIGHT)
+        pos.y -= HEIGHT;
+}
+
+void Agent::updateDir(shared_ptr<GROUP_SETTINGS> Settings) {
+
+    Vector3f me = norm(Vector3f(colorFinal.r, colorFinal.g, colorFinal.b));
     Vector3f l = norm(avgColors[0]);
     Vector3f f = norm(avgColors[1]);
     Vector3f r = norm(avgColors[2]);
 
-    float lval = compare(me, l) - repulsion;
-    float rval = compare(me, r) - repulsion;
-    float mval = compare(me, f) - repulsion;
+    float lval = compare(me, l) - Settings->Agents.repulsion;
+    float rval = compare(me, r) - Settings->Agents.repulsion;
+    float mval = compare(me, f) - Settings->Agents.repulsion;
 
-    float bias = (lval - rval) * (1 - mval) * 255;
-    //biasFactor affects how heavily the bias affects the decision
-    float val = ((float)(rand() % 2000) / 1000.0f - 1.0f) * randFactor + bias * biasFactor;
-    alterDir( val * pi / 180.0f * turnFactor );
-    debug = false;
-}
+    float bias = (lval - rval) * (1.0f - mval) * 255.0f;
 
-void Agent::mandelBrot(float time) {
-    float c_re = (pos.x - width / 2.0) * 4.0 / width / 2;
-    float c_im = (pos.y - height / 2.0) * 4.0 / height / 2;
-    c_re *= 1000.0f / pow(time, 1.5f);
-    c_im *= 1000.0f / pow(time, 1.5f);
-    c_re += -1.34855;
-    c_im += -0.0456763;
-    float x = 0, y = 0;
-    float max = 500;
-    for (float it = 0; it < max; it++) {
-        float x_new = x * x - y * y + c_re;
-        y = 2 * x * y + c_im;
-        x = x_new;
-        if (x * x + y * y > 4) {
-            //color.r *= it / max * 10;
-            color.g *= it / max * 100;
-            color.b *= it / max * 50;
-            break;
-        }
-    }
+    // smoothing
+    bias = Settings->Agents.memoryFactor * lastTurnBias + (1.0f - Settings->Agents.memoryFactor) * bias;
+    lastTurnBias = bias;
+
+    // randomness and turn
+    float val = ((float)(rand() % 2000) / 1000.0f - 1.0f) * Settings->Agents.randFactor
+        + bias * Settings->Agents.biasFactor;
+
+    alterDir(Settings, val * _Pi / 180.0f * Settings->Agents.turnFactor);
+
+    // reset final color
+    colorFinal = colorBase;
 }
 
 float Agent::getDir() {
@@ -224,23 +319,23 @@ int wrap(int i, int size) {
     return i;
 }
 
-void Agent::searchImage(Image& im) {
+void Agent::searchImage(shared_ptr<GROUP_SETTINGS> Settings, Image& im, vector<Vector2i>& normPixels) {
 
     float angles[3] = {
-        dir + searchAngleOffset + searchAngle,
+        dir + Settings->Agents.Search.searchAngleOffset + Settings->Agents.Search.searchAngle,
         dir,
-        dir - searchAngleOffset - searchAngle
+        dir - Settings->Agents.Search.searchAngleOffset - Settings->Agents.Search.searchAngle
     };
 
     avgColors = { Vector3f(0,0,0), Vector3f(0,0,0), Vector3f(0,0,0) };
 
-    if (normTriangle.size() <= 0)
+    if (normPixels.size() <= 0)
         return;
 
-    for (int pt = 0; pt < normTriangle.size(); pt++) {
+    for (int pt = 0; pt < normPixels.size(); pt++) {
 
-        int ptx = normTriangle[pt].x;
-        int pty = normTriangle[pt].y;
+        int ptx = normPixels[pt].x;
+        int pty = normPixels[pt].y;
 
         for (int dir = 0; dir < 3; dir++) {
 
@@ -255,10 +350,10 @@ void Agent::searchImage(Image& im) {
                 + pty * cosf(angles[dir])
             ;
 
-            ptransx = wrap(ptransx, width);
-            ptransy = wrap(ptransy, height);
+            ptransx = wrap(ptransx, WIDTH);
+            ptransy = wrap(ptransy, HEIGHT);
 
-            Color c = im.getPixel(ptransx, ptransy);
+            Color c = im.getPixel({ static_cast<unsigned int>(ptransx), static_cast<unsigned int>(ptransy) });
 
             avgColors[dir].x += c.r;
             avgColors[dir].y += c.g;
@@ -267,9 +362,9 @@ void Agent::searchImage(Image& im) {
     }
 
     for (int dir = 0; dir < 3; dir++) {
-        avgColors[dir].x /= normTriangle.size();
-        avgColors[dir].y /= normTriangle.size();
-        avgColors[dir].z /= normTriangle.size();
+        avgColors[dir].x /= normPixels.size();
+        avgColors[dir].y /= normPixels.size();
+        avgColors[dir].z /= normPixels.size();
     }
 }
 
@@ -280,12 +375,20 @@ float Agent::cosfRatio(float val) {
 }
 
 float Agent::cosfRatio(float val, float offset, float scale) {
-    return (cosf(val * 2 * pi) + offset) / scale;
+    return (cosf(val * 2 * _Pi) + offset) / scale;
 }
 
-void Agent::alterDir(float delta) {
+void Agent::alterDir(shared_ptr<GROUP_SETTINGS> Settings, float delta) {
     dir = dir + delta;
     vel = Vector2f(cos(dir), sin(dir));
+
+    //lock dir to 8 angles
+	if (Settings->Agents.lockDir) {
+		float angle = dir / (_Pi / Settings->Agents.lockDirCount);
+		angle = round(angle);
+		dir = angle * (_Pi / Settings->Agents.lockDirCount);
+		vel = Vector2f(cos(dir), sin(dir));
+	}
 }
 
 float Agent::compare(Vector3f a, Vector3f b) {
@@ -309,54 +412,4 @@ Vector3f Agent::norm(Vector3f v) {
         return zero;
     }
     return Vector3f(v.x / mag, v.y / mag, v.z / mag);
-}
-
-void Agent::generateNormTriangleSimple() {
-    normTriangle.clear();
-
-    normTriangle.push_back(Vector2i(
-        searchSize,
-        0
-    ));
-}
-
-void Agent::generateNormTriangle(int maxPts) {
-
-    normTriangle.clear();
-
-    Vector2f pts[3] = {
-        Vector2f(0, 0),
-        Vector2f(
-            searchSize * cos(searchAngle / 2),
-            searchSize * sin(searchAngle / 2)
-        ),
-        Vector2f(
-            searchSize * cos(-1 * searchAngle / 2),
-            searchSize * sin(-1 * searchAngle / 2)
-        )
-    };
-
-    float xStart = 0;
-    float xEnd = pts[1].x;
-
-    if (xEnd < xStart)
-        swap(xStart, xEnd);
-
-    float m1 = pts[1].y / pts[1].x;
-    float m2 = pts[2].y / pts[2].x;
-
-    if (m2 < m1)
-        swap(m1, m2);
-
-    for (int x = floor(xStart); x <= ceil(xEnd); x ++) {  
-
-        float yStart = m1 * x;
-        float yEnd = m2 * x;
-
-        for (int y = floor(yStart); y <= ceil(yEnd); y++) {
-            normTriangle.push_back(Vector2i(x, y));
-            if (normTriangle.size() > maxPts)
-                return;
-        }
-    }
 }

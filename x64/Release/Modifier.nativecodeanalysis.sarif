@@ -1,0 +1,227 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0-rtm.5.json",
+  "runs": [
+    {
+      "results": [],
+      "tool": {
+        "driver": {
+          "name": "PREfast",
+          "fullName": "PREfast Code Analysis",
+          "version": "14.43.34810.0",
+          "informationUri": "https://aka.ms/cpp/ca"
+        }
+      },
+      "invocations": [
+        {
+          "executionSuccessful": true
+        }
+      ],
+      "artifacts": [
+        {
+          "location": {
+            "uri": "file:///c:/users/olson/desktop/development/vs workspace/color-thing/color-thing/modifier.cpp"
+          },
+          "roles": [
+            "analysisTarget"
+          ],
+          "hashes": {
+            "sha-256": "eb5338fe6c3c202c4dc118d5bc0ae458a757b727bf5d8c34345a61b813ba6f3a"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///c:/users/olson/desktop/development/vs workspace/color-thing/color-thing/modifier.hpp"
+          },
+          "hashes": {
+            "sha-256": "90bf25401ba857172afe245fcb1ad9138fc6110bcf5ca46c521fd775cd8b5cea"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///c:/users/olson/desktop/development/vs workspace/_libraries/sfgui-0.4.0/include/sfgui/widget.hpp"
+          },
+          "hashes": {
+            "sha-256": "280d288442f8d5751e405861aa13c599b1fd249ca319014598e5bef5ae3c5c17"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///c:/users/olson/desktop/development/vs workspace/_libraries/sfgui-0.4.0/include/sfgui/object.hpp"
+          },
+          "hashes": {
+            "sha-256": "9de6a3de65a43197ef1f4f3a7c8c7d405c6bdfd6bba982764b85d9e2b91119cd"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///c:/users/olson/desktop/development/vs workspace/_libraries/sfgui-0.4.0/include/sfgui/config.hpp"
+          },
+          "hashes": {
+            "sha-256": "21e6e5499acc9e3bfe8805c904bb8ef2d13104e15eeb843a1bc7dbde702e681d"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///c:/users/olson/desktop/development/vs workspace/_libraries/sfgui-0.4.0/include/sfgui/signal.hpp"
+          },
+          "hashes": {
+            "sha-256": "997fd824b92d83cd9961e3ba78b6ff726864e1d50ded46f4235b4492863573c8"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///c:/users/olson/desktop/development/vs workspace/_libraries/sfml-2.6.0/include/sfml/graphics/rect.hpp"
+          },
+          "hashes": {
+            "sha-256": "14da874c46ae2ffb97b367eee5b044ffd28f5f220304855a7bf50d70837c81d4"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///c:/users/olson/desktop/development/vs workspace/_libraries/sfml-2.6.0/include/sfml/system/vector2.hpp"
+          },
+          "hashes": {
+            "sha-256": "3271f8eaac3f1d262878fbb14cdd4dbeb1cd329b80577515513f4f7c45c05fb2"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///c:/users/olson/desktop/development/vs workspace/_libraries/sfml-2.6.0/include/sfml/system/vector2.inl"
+          },
+          "hashes": {
+            "sha-256": "70d8e5ca6dc3aa99b92533bc231e3d556c953b4fba2c0ae064b5b8454ff838d9"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///c:/users/olson/desktop/development/vs workspace/_libraries/sfml-2.6.0/include/sfml/graphics/rect.inl"
+          },
+          "hashes": {
+            "sha-256": "44e4087b4adb38db3b9cce03138c3614f38cf38ae9e1fe9a7dfb89d277f948cb"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///c:/users/olson/desktop/development/vs workspace/_libraries/sfml-2.6.0/include/sfml/window/mouse.hpp"
+          },
+          "hashes": {
+            "sha-256": "335614237fa450e2b37172cc0eb23a2b934b36bc8f0030605316de86c567c48c"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///c:/users/olson/desktop/development/vs workspace/_libraries/sfml-2.6.0/include/sfml/window/export.hpp"
+          },
+          "hashes": {
+            "sha-256": "997ad366b5a6cc230839a9cfc3aa6a3c6dccb9df4e38a7eccc26a0924f1f92b8"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///c:/users/olson/desktop/development/vs workspace/_libraries/sfml-2.6.0/include/sfml/config.hpp"
+          },
+          "hashes": {
+            "sha-256": "e412351b94026c43b3a3953661ee3533099c9faf8c6b1cfc090da96a286459eb"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///c:/users/olson/desktop/development/vs workspace/_libraries/sfml-2.6.0/include/sfml/window/keyboard.hpp"
+          },
+          "hashes": {
+            "sha-256": "f31958d337b37b5abfb10974b96c026ecc87878ffdb70a9ff58b3282d0009718"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///c:/users/olson/desktop/development/vs workspace/_libraries/sfgui-0.4.0/include/sfgui/box.hpp"
+          },
+          "hashes": {
+            "sha-256": "ade76432f79c3f3b1aab12408a828db3bca9925f36ee9cfcf77fb2d09216eca9"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///c:/users/olson/desktop/development/vs workspace/_libraries/sfgui-0.4.0/include/sfgui/container.hpp"
+          },
+          "hashes": {
+            "sha-256": "8092eb459e55ddf74d5dfa52b4bfd6e16922a21a11e4c3eacdf20703214295ac"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///c:/users/olson/desktop/development/vs workspace/_libraries/sfgui-0.4.0/include/sfgui/button.hpp"
+          },
+          "hashes": {
+            "sha-256": "43b856d6aabca2c33177d32190dfbb48dd46d187b23ca22ef64a1ec1a4c74eee"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///c:/users/olson/desktop/development/vs workspace/_libraries/sfgui-0.4.0/include/sfgui/bin.hpp"
+          },
+          "hashes": {
+            "sha-256": "d1dd8134bb809fc5ff0e645d2cb9eaa550d111a8f749bad2e56d2e249fa13910"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///c:/users/olson/desktop/development/vs workspace/_libraries/sfml-2.6.0/include/sfml/system/string.hpp"
+          },
+          "hashes": {
+            "sha-256": "5ef3415df60dafd46ddfa5ba57a0b6d7331a643986b6875761d9846437dca2c9"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///c:/users/olson/desktop/development/vs workspace/_libraries/sfml-2.6.0/include/sfml/system/export.hpp"
+          },
+          "hashes": {
+            "sha-256": "ae00bbdb837d29dca4d82d897fd57300e7542b19ac7d94b33e842aad64c5e07a"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///c:/users/olson/desktop/development/vs workspace/_libraries/sfml-2.6.0/include/sfml/system/utf.hpp"
+          },
+          "hashes": {
+            "sha-256": "63c11bca4545fd490b2788421623ac87c1cda76d2f40726e495efce89db4332d"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///c:/users/olson/desktop/development/vs workspace/_libraries/sfml-2.6.0/include/sfml/system/utf.inl"
+          },
+          "hashes": {
+            "sha-256": "577ed3b6eea533f1d2fd767cf8b52ca49f9fd04b2f4e2c10123789011f4dd7e5"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///c:/users/olson/desktop/development/vs workspace/_libraries/sfml-2.6.0/include/sfml/system/string.inl"
+          },
+          "hashes": {
+            "sha-256": "7c1349a61ced7e8bf3d1ed5cd8583709e93d6277608f5f8f3a602a291d02d836"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///c:/users/olson/desktop/development/vs workspace/_libraries/sfgui-0.4.0/include/sfgui/label.hpp"
+          },
+          "hashes": {
+            "sha-256": "1fe04a9c6e1ae8eb8b982f707806d25e313dda2e70c9fd58f17c882324ce4f4e"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///c:/users/olson/desktop/development/vs workspace/_libraries/sfgui-0.4.0/include/sfgui/misc.hpp"
+          },
+          "hashes": {
+            "sha-256": "846821c70cbff2f5758ebf391cd9b4ea9abe8d4e39e964afd0f85c4ae34acdb7"
+          }
+        }
+      ]
+    }
+  ]
+}
